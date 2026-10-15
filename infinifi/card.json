@@ -17,7 +17,8 @@
       "kind": "openapi",
       "api": "infinifi-api",
       "url": "https://agentdata.network/infinifi/openapi/v1/openapi.json",
-      "notes": "The same document is served by the backend at GET /v1/openapi.json. Add sha256 once the URL is frozen."
+      "sha256": "87c11ad79739b4667bd67def30071cf27a9129c535303a4bc0fc2ec4a3e941fd",
+      "notes": "The same document is served by the backend at GET /v1/openapi.json."
     }
   ],
   "access": "public",
