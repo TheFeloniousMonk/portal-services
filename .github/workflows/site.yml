@@ -1,0 +1,66 @@
+# Build the docs site from each service's README, card and OpenAPI document,
+# and publish it to GitHub Pages at https://agentdata.network (site/build.mjs).
+# The cards' docs, serving.docs and specs[0].url point at the pages it writes.
+name: site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "*/README.md"
+      - "*/card.json"
+      - "*/backend/openapi.json"
+      - "*/backend/config.js"
+      - "*/deploy/**"
+      - "site/**"
+      - ".github/workflows/site.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: node build.mjs dist
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: site/dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

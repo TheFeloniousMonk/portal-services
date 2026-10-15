@@ -14,3 +14,12 @@ deploy/.env
 # lives in this folder locally so the Pocket Service Manager sees every service
 # in one place, but it is never part of this repository.
 /meadow-node/
+
+# Markdown notes (handoffs, scratch docs) stay local; only README and CLAUDE
+# files are tracked.
+*.md
+!README.md
+!CLAUDE.md
+
+# Built docs site (site/build.mjs); CI publishes it
+site/dist/

@@ -1,0 +1,12 @@
+{
+  "name": "agentdata-site",
+  "private": true,
+  "type": "module",
+  "description": "Builds the static docs site served at https://agentdata.network from each service's README, card and OpenAPI document.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "marked": "18.1.1"
+  }
+}

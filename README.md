@@ -45,6 +45,10 @@ Every response from every service is a JSON object, including errors, as Pocket'
 
 The Pocket Service Manager (PSM4Win) reads one services folder. Point its Settings at a clone of this repository. To manage Meadow from the same app, clone `meadow-node` into this folder as `meadow-node/`; `.gitignore` keeps it out of this repository.
 
+## Docs site
+
+Each card's `docs`, `serving.docs` and `specs[0].url` point at [agentdata.network](https://agentdata.network). [`site/build.mjs`](site/build.mjs) builds those pages from every service's README, card and `backend/openapi.json`, and the `site` workflow publishes them to GitHub Pages on every push to `main`. To preview locally, run `npm ci && node build.mjs` in `site/`, then serve `site/dist/`.
+
 ## Tooling
 
 The services were built with the Pocket Service Builder Skill, which also provides the backend linter (`scripts/lint_backend.py`) and card validator mentioned in the service READMEs. It is published at [pokt-network/pocket-network-resources](https://github.com/pokt-network/pocket-network-resources/tree/main/service-builder).
