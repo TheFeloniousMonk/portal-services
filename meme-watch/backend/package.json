@@ -1,0 +1,17 @@
+{
+  "name": "meme-watch",
+  "version": "1.0.0",
+  "description": "meme-watch: a rolling 60-minute feed of Solana memecoin launches, served as a REST service on Pocket Network. Polls DexPaprika on a fixed credit budget and answers every relay from cache.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  },
+  "dependencies": {}
+}

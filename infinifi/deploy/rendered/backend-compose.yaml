@@ -1,0 +1,25 @@
+# infinifi backend on the supplier host. Starts only the backend container and
+# joins the supplier stack's network (templates/ha/docker-compose.yaml), where the
+# relayer reaches it as http://infinifi-backend:8080. Nothing is exposed to the
+# internet. Put it in /opt/pocket/services/infinifi/deploy/ next to backend/.
+#
+#   docker compose -p infinifi up -d --build
+
+services:
+  backend:
+    build: ../backend
+    image: infinifi-backend:latest
+    container_name: infinifi-backend
+    restart: unless-stopped
+    # With a deploy/settings.json (references/deploy.md): the operator's values, kept beside
+    # backend/ and deploy/ so a redeploy never replaces them. Create the file first
+    # (install -m 600 /dev/null ../settings.env); the Pocket Service Manager does.
+    # env_file: ../settings.env
+    expose:
+      - "8080"
+    networks: [supplier]
+
+networks:
+  supplier:
+    external: true
+    name: pocket-supplier

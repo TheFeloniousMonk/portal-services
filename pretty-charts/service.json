@@ -1,0 +1,32 @@
+{
+  "service_id": "pretty-charts",
+  "name": "Pretty Charts",
+  "compute_units_per_relay": 10000,
+  "card": "card.json",
+  "networks": {
+    "beta": {
+      "register_tx": "6D0A3FB0FF3514FEA9716BA6A23BA0EA2E1F4B924E5D4F9CEDE4BC485E8B98DC",
+      "app_stake_tx": "55723577082F1430551AA1B9523ACAF86554805A1CA2A329A601A0D31F9E6083",
+      "app_wallet": "app-pretty-charts",
+      "app_address": "pokt1xw3ky479rcx5plv0dkuyw388mdrjtquvx5eu9g",
+      "supplier_stake_tx": "D1F12AC41502250B8B4426D7C888DBF919D2521BCB0E1D4ECF6E291F21CD2CD2",
+      "supplier_operator": "pokt1z3j720nzulazcx60jyzxrfqz6m5d9n49pnhn0a",
+      "supplier_url": "https://test.node.meadowprotocol.com",
+      "deploy_host": "cherry-as",
+      "deploy_path": "/opt/pocket/supplier-beta",
+      "deployed_at": "2026-09-28T21:33:23.087Z"
+    },
+    "main": {
+      "register_tx": "2D59D61E5DD6C334CB070302F27109D0795CDF6024171EAFD1B7AB8DBEB06AFB",
+      "app_stake_tx": "909C4CBFC986A0D854619CE65144235FB94823A734CE98D77DE830D61D700E25",
+      "app_wallet": "app-pretty-charts",
+      "app_address": "pokt1xw3ky479rcx5plv0dkuyw388mdrjtquvx5eu9g",
+      "supplier_stake_tx": "82F131715FF10C9E482B5160834C75D1FAACC584AF28D1973AD69409B61D2595",
+      "supplier_operator": "pokt16e4xt0zw67k3stjhrvmp9n59e26fshcm9vu0jl",
+      "supplier_url": "https://node.meadowprotocol.com",
+      "deploy_host": "cherry-as",
+      "deploy_path": "/opt/pocket/supplier-main",
+      "deployed_at": "2026-09-28T22:57:11.166Z"
+    }
+  }
+}

@@ -1,0 +1,77 @@
+# Test every service backend, and on main publish one image per service to
+# ghcr.io/<owner>/<service>.
+#
+# Tags: :<version> (from the backend's config.js, the same version it reports at
+# GET /v1/version), :sha-<short>, and :latest. A version tag is pushed only the
+# first time that version is built, so a published :1.1.0 never changes under a
+# supplier; bump config.js to publish a new one.
+name: services
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  service:
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [infinifi, meme-watch, pretty-charts, taint-check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; fi
+
+      - name: Test
+        run: npm test
+
+      - name: Version
+        id: v
+        run: |
+          v=$(grep -m1 -oE 'version: "[0-9]+\.[0-9]+\.[0-9]+"' config.js | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          [ -n "$v" ] || { echo "::error::no version in ${{ matrix.service }}/backend/config.js"; exit 1; }
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$owner/${{ matrix.service }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: |
+          docker build \
+            --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
+            --label org.opencontainers.image.version=${{ steps.v.outputs.version }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            -t svc .
+
+      - name: Publish
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          IMAGE: ${{ steps.v.outputs.image }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          short=$(echo "${{ github.sha }}" | cut -c1-7)
+          for tag in "sha-$short" latest; do
+            docker tag svc "$IMAGE:$tag" && docker push "$IMAGE:$tag"
+          done
+          if docker manifest inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
+            echo "$IMAGE:$VERSION already published; left unchanged"
+          else
+            docker tag svc "$IMAGE:$VERSION" && docker push "$IMAGE:$VERSION"
+          fi

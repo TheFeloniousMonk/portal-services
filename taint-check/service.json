@@ -1,0 +1,29 @@
+{
+  "service_id": "taint-check",
+  "name": "TaintCheck",
+  "compute_units_per_relay": 50000,
+  "card": "card.json",
+  "networks": {
+    "beta": {
+      "register_tx": "1518BBB20B57BEC234CFE76263229A235705E88159C58F7AAB51D1EEFE218EF2",
+      "deploy_host": "cherry-as",
+      "deploy_path": "/opt/pocket/supplier-beta",
+      "deployed_at": "2026-09-28T21:34:24.194Z",
+      "supplier_stake_tx": "D1F12AC41502250B8B4426D7C888DBF919D2521BCB0E1D4ECF6E291F21CD2CD2",
+      "supplier_operator": "pokt1z3j720nzulazcx60jyzxrfqz6m5d9n49pnhn0a",
+      "supplier_url": "https://test.node.meadowprotocol.com",
+      "app_stake_tx": "F52312A0C4C99EEB57B93634F3B1AF584C978769025704CD53FE0C8292F90DB8",
+      "app_wallet": "app-taint-check",
+      "app_address": "pokt1mj3a0ssf9vqz6p2esgys0rau6javnw3gf06sz0"
+    },
+    "main": {
+      "register_tx": "97C6810AA17D4E89B4EB694688C865AF460A39B9CE34B1CBCE9E8300EDF9C527",
+      "deploy_host": "cherry-as",
+      "deploy_path": "/opt/pocket/supplier-main",
+      "deployed_at": "2026-09-28T22:57:50.932Z",
+      "supplier_stake_tx": "82F131715FF10C9E482B5160834C75D1FAACC584AF28D1973AD69409B61D2595",
+      "supplier_operator": "pokt16e4xt0zw67k3stjhrvmp9n59e26fshcm9vu0jl",
+      "supplier_url": "https://node.meadowprotocol.com"
+    }
+  }
+}

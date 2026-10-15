@@ -1,0 +1,7 @@
+{
+  "service_id": "infinifi",
+  "name": "infiniFi Data",
+  "compute_units_per_relay": 50000,
+  "card": "card.json",
+  "networks": {}
+}

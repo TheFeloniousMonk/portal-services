@@ -1,0 +1,36 @@
+# infinifi backend on a supplier host.
+#
+# One supplier serves every service it is staked for through one HA RelayMiner stack
+# per network. That stack (redis + miner + relayer + Caddy) owns the network below.
+# This file adds only the infiniFi Data backend to that network; each network's
+# relayer reaches it as http://infinifi-backend:8080 once relayer-service.yaml is
+# merged into its relayer config (see add-to-relayer.sh). Nothing here is exposed
+# to the internet.
+#
+# No secret is needed: the infiniFi API is public and keyless. The backend needs
+# outbound HTTPS to api.infinifi.xyz.
+#
+#   docker compose -f docker-compose.yaml up -d --build
+
+services:
+  backend:
+    build: ../backend
+    image: infinifi-backend:1.0.0
+    container_name: infinifi-backend
+    restart: unless-stopped
+    environment:
+      # eth-api.infinifi.xyz/api serves the same data if this host is ever blocked.
+      IF_UPSTREAM_BASE: "https://api.infinifi.xyz/api"
+      IF_UPSTREAM_DEADLINE_MS: "8000"
+      IF_PROTOCOL_TTL_MS: "60000"
+      IF_SLOW_TTL_MS: "300000"
+      IF_STALE_MAX_MS: "900000"
+    mem_limit: 256m
+    expose:
+      - "8080"
+    networks: [supplier]
+
+networks:
+  supplier:
+    external: true
+    name: pocket-supplier

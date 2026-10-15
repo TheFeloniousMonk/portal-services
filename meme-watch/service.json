@@ -1,0 +1,29 @@
+{
+  "service_id": "meme-watch",
+  "name": "Meme Watch",
+  "card": "card.json",
+  "networks": {
+    "beta": {
+      "register_tx": "3BB71046652FB3AB21F78AF5C5D934D419D60E983747850917A32489F99A77A4",
+      "app_stake_tx": "88EE29A160831AD27C4C60687CF5ACAB7B6E875ABFD80118B82E9A9A383F3557",
+      "app_wallet": "app-meme-watch",
+      "app_address": "pokt1myl0d5qu6e66y8lmal8v4640v6hvx869qggeg4",
+      "deploy_host": "cherry",
+      "deploy_path": "/opt/pocket/supplier",
+      "deployed_at": "2026-09-20T12:17:19.859Z",
+      "supplier_stake_tx": "B108BCBD8870393ABC590BA1D6D5DBAED48F7B2C1C48F6F604EA924595726A4E",
+      "supplier_operator": "pokt1v8v0pejdgejkqvaynluhxnp2w7rpdergd26tuk",
+      "supplier_url": "https://services-beta.agentdata.network"
+    },
+    "main": {
+      "register_tx": "76F3242AA123F1ACE5460176DB7147AD9CF1F79B3646038237E521ED8B080DF7",
+      "deploy_host": "cherry",
+      "deploy_path": "/opt/pocket/supplier-main",
+      "deployed_at": "2026-09-20T15:02:02.372Z",
+      "supplier_stake_tx": "C15F649A3DF6E80E8CFA5F42DDDAB928C84339FBBA1D1639DF3B66B90CBFD354",
+      "supplier_operator": "pokt1yk3wrlmj64dzsqcrrmgq3uazk9sm56kpvygsed",
+      "supplier_url": "https://services.agentdata.network"
+    }
+  },
+  "compute_units_per_relay": 50000
+}

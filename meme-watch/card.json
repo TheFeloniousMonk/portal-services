@@ -1,0 +1,58 @@
+{
+  "schema": "pocket-service-card/v1",
+  "description": "meme-watch returns a rolling 60-minute feed of Solana memecoin launches inside a JSON object. POST /v1/launches with an optional dex filter (pumpfun, pumpswap, meteora_daam_v2, meteora_dbc; omit for every venue) plus optional limit, max_age_minutes, min_txns, min_volume_usd, min_liquidity_usd, named_only, sort and format. Each launch carries pool and token address, venue, creation time, name and symbol, price, fully diluted value, quote-side reserve, since-launch volume and transaction count, buy and sell split, volume per transaction, 5-minute price change, and drawdown from its all-time high. Set format to csv and the table rides in the csv string field. The backend polls upstream on a fixed budget and answers from cache, so results are point-in-time and two suppliers legitimately differ. Each supplier needs its own DexPaprika API key.",
+  "rpc_types": [
+    {
+      "type": "REST",
+      "intent": "expected",
+      "backend_hint": "meme-watch container on :8080; mount at /",
+      "notes": "POST /v1/launches, GET /v1/version, GET /healthz, GET /v1/capabilities, and GET /v1/openapi.json are expected. Every response is a JSON object; when csv format is requested the table rides in the 'csv' string field, always last. All inputs are read from the POST body; no query string or caller header is relied upon."
+    }
+  ],
+  "apis": [
+    "meme-watch-api",
+    "solana-launch-feed"
+  ],
+  "specs": [
+    {
+      "kind": "openapi",
+      "api": "meme-watch-api",
+      "url": "https://agentdata.network/meme-watch/openapi/v1/openapi.json",
+      "notes": "The same document is served by the backend at GET /v1/openapi.json. Add sha256 once the URL is frozen."
+    }
+  ],
+  "access": "public",
+  "results": "variable",
+  "serving": {
+    "backend": "The meme-watch container (Node 22, no runtime dependencies; built from services/meme-watch/backend) behind the HA RelayMiner. It polls DexPaprika every 120 seconds under a hard monthly credit governor and holds the window in memory, mirrored to a CSV on a small persistent volume, so every relay is served from cache and never waits on an upstream call. Each supplier must set its own key in MW_DEXPAPRIKA_API_KEY; without one it falls back to the keyless tier and the feed thins. Light on CPU and memory.",
+    "implementations": [
+      "meme-watch >= 1.0"
+    ],
+    "docs": "https://agentdata.network/meme-watch/operators",
+    "min_disk_gb": 1,
+    "min_ram_gb": 1,
+    "healthcheck": [
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/v1/version", "method": "GET" },
+        "expect": { "json_path": "$.service", "matches": "^meme-watch$" },
+        "notes": "Identity probe: pins the backend to this service so a wrong backend cannot be staked under this id."
+      },
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/healthz", "method": "GET" },
+        "expect": { "json_path": "$.status", "matches": "^ok$" },
+        "notes": "Readiness probe: 200 only once the first poll has completed and the window holds data."
+      },
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/v1/launches", "method": "POST", "body": { "limit": 1 } },
+        "expect": { "json_path": "$.window_minutes", "matches": "^60$" },
+        "notes": "Functional probe: exercises the query path and asserts the declared window. Structural rather than data-dependent, because the feed changes every poll."
+      }
+    ],
+    "notes": "Every request is a POST JSON body to /v1/launches, answered from memory in milliseconds. The response carries as_of and complete_before so a consumer can tell a quiet minute from one still being indexed upstream, and pending_identity for launches discovered but not yet named. Gateway operators: type passthrough, rpc_types [\"rest\"], relay_timeout at least 10s; see sage-service.yaml in the service repository."
+  },
+  "docs": "https://agentdata.network/meme-watch/",
+  "updated": "2026-09-20"
+}

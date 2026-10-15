@@ -1,0 +1,16 @@
+# Dependencies and runtime state
+node_modules/
+data/
+*.log
+__pycache__/
+
+# Per-supplier secrets: never commit a filled copy
+deploy/.env
+*/deploy/.env
+*.hex
+*.pem
+
+# meadow-node is its own repository (TheFeloniousMonk/meadow-node). Its clone
+# lives in this folder locally so the Pocket Service Manager sees every service
+# in one place, but it is never part of this repository.
+/meadow-node/

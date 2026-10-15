@@ -1,0 +1,272 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "meme-watch",
+    "version": "1.0.0",
+    "description": "A rolling 60-minute feed of Solana memecoin launches, served as a REST service on Pocket Network. The backend polls DexPaprika on a fixed credit budget and answers every request from its own cache, so a relay never waits on an upstream call. Every response is a JSON object; when csv format is requested the rendered table rides in the csv string field. Inputs must be sent in the POST body: no caller header survives a relay and the query string is not reliably forwarded. Suppliers of this service must configure their own DexPaprika API key."
+  },
+  "servers": [{ "url": "/", "description": "The backend, mounted at the root" }],
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Reachability ping",
+        "description": "Answers 2xx so the RelayMiner accepts the backend as reachable.",
+        "responses": {
+          "200": {
+            "description": "Alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "service": { "type": "string" }, "status": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Readiness probe",
+        "description": "200 once the first poll has completed and the window holds data. 503 while warming.",
+        "responses": {
+          "200": {
+            "description": "Ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "const": "ok" },
+                    "service": { "type": "string" },
+                    "rows": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "503": { "description": "Warming up; no poll has completed yet" }
+        }
+      }
+    },
+    "/v1/version": {
+      "get": {
+        "summary": "Identity probe",
+        "description": "Pins this backend to the meme-watch service id.",
+        "responses": {
+          "200": {
+            "description": "Identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["service", "version"],
+                  "properties": {
+                    "service": { "type": "string", "const": "meme-watch" },
+                    "version": { "type": "string" },
+                    "chain": { "type": "string" },
+                    "source": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "summary": "Limits, window, sorts, columns, and upstream budget state",
+        "responses": {
+          "200": {
+            "description": "Capabilities",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/v1/openapi.json": {
+      "get": {
+        "summary": "This document",
+        "responses": {
+          "200": {
+            "description": "OpenAPI document",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        }
+      }
+    },
+    "/v1/launches": {
+      "post": {
+        "summary": "Launches in the rolling window",
+        "description": "Returns launches from the last 60 minutes, newest first by default. An empty object returns the default page. Every filter is optional.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LaunchQuery" },
+              "examples": {
+                "all": { "summary": "Everything in the window", "value": {} },
+                "pumpfun_only": {
+                  "summary": "One launchpad, biggest first",
+                  "value": { "dex": "pumpfun", "sort": "volume_usd", "limit": 25 }
+                },
+                "csv": {
+                  "summary": "The table as CSV inside the JSON envelope",
+                  "value": { "format": "csv", "max_age_minutes": 15 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The window",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/LaunchResponse" } }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "413": {
+            "description": "Body too large",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "LaunchQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dex": {
+            "description": "Restrict to one or more launch venues by dex id. Omit for every venue in the window.",
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ],
+            "examples": ["pumpfun", "pumpswap", "meteora_daam_v2", "meteora_dbc"]
+          },
+          "limit": { "type": "integer", "minimum": 0, "maximum": 500, "default": 100 },
+          "max_age_minutes": { "type": "number", "minimum": 0, "maximum": 60, "default": 60 },
+          "min_txns": { "type": "number", "minimum": 0 },
+          "min_volume_usd": { "type": "number", "minimum": 0 },
+          "min_liquidity_usd": { "type": "number", "minimum": 0 },
+          "named_only": { "type": "boolean", "default": false },
+          "sort": {
+            "type": "string",
+            "enum": ["created_at", "volume_usd", "txns", "vol_per_txn", "price_change_5m"],
+            "default": "created_at"
+          },
+          "format": { "type": "string", "enum": ["json", "csv"], "default": "json" }
+        }
+      },
+      "Launch": {
+        "type": "object",
+        "properties": {
+          "pool_address": { "type": "string" },
+          "dex_id": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "first_seen": { "type": "string", "format": "date-time" },
+          "age_minutes": { "type": "number" },
+          "token_address": { "type": "string" },
+          "name": { "type": "string" },
+          "symbol": { "type": "string" },
+          "decimals": { "type": ["integer", "null"] },
+          "total_supply": { "type": ["number", "null"] },
+          "website": { "type": "string" },
+          "twitter": { "type": "string" },
+          "has_image": { "type": "boolean" },
+          "price_usd": { "type": ["number", "null"] },
+          "fdv_usd": { "type": ["number", "null"] },
+          "liquidity_usd": {
+            "type": ["number", "null"],
+            "description": "As reported upstream. On a bonding-curve pool this does not reconcile with the reserves; prefer quote_reserve_usd."
+          },
+          "quote_reserve_usd": {
+            "type": ["number", "null"],
+            "description": "The quote-side reserve in USD, the honest measure of money in the pool."
+          },
+          "volume_usd": {
+            "type": "number",
+            "description": "Since launch, for any pool younger than the window."
+          },
+          "txns": { "type": "integer" },
+          "buys": { "type": ["integer", "null"] },
+          "sells": { "type": ["integer", "null"] },
+          "buy_usd": { "type": ["number", "null"] },
+          "sell_usd": { "type": ["number", "null"] },
+          "vol_per_txn": {
+            "type": ["number", "null"],
+            "description": "Volume divided by transaction count. A very low value indicates automated churn rather than organic interest."
+          },
+          "price_change_5m": {
+            "type": ["number", "null"],
+            "description": "Percent. The only price window that carries signal this early; the 6h and 24h figures read zero until a pool is older than they are."
+          },
+          "ath_usd": { "type": ["number", "null"] },
+          "ath_at": { "type": "string" },
+          "drawdown_from_ath_pct": { "type": ["number", "null"] },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "LaunchResponse": {
+        "type": "object",
+        "required": ["service", "window_minutes", "count"],
+        "properties": {
+          "service": { "type": "string" },
+          "version": { "type": "string" },
+          "chain": { "type": "string" },
+          "source": { "type": "string" },
+          "as_of": {
+            "type": ["string", "null"],
+            "description": "When the last poll completed."
+          },
+          "cache_age_seconds": { "type": ["integer", "null"] },
+          "window_minutes": { "type": "integer" },
+          "complete_before": {
+            "type": "string",
+            "description": "Launches after this instant may still be arriving in the upstream index."
+          },
+          "upstream_ok": { "type": "boolean" },
+          "upstream_note": {
+            "type": "string",
+            "enum": ["", "rate_limited", "quota_exhausted", "budget_exhausted", "unreachable", "bad_response", "http_error"]
+          },
+          "window_truncated": { "type": "boolean" },
+          "sort": { "type": "string" },
+          "count": { "type": "integer" },
+          "matched": { "type": "integer" },
+          "total_in_window": { "type": "integer" },
+          "pending_identity": {
+            "type": "integer",
+            "description": "Discovered launches awaiting identity enrichment. They are deliberately absent from the results until named."
+          },
+          "format": { "type": "string", "enum": ["json", "csv"] },
+          "columns": { "type": "array", "items": { "type": "string" } },
+          "launches": { "type": "array", "items": { "$ref": "#/components/schemas/Launch" } },
+          "csv": { "type": "string", "description": "Present only when format is csv." }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

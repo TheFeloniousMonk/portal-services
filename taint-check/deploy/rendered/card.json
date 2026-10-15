@@ -1,0 +1,62 @@
+{
+  "schema": "pocket-service-card/v1",
+  "description": "TaintCheck scans a dependency manifest for known-vulnerable and confirmed-malicious packages. POST /v1/scan with one of: lockfile.url (a link to one public file on github.com, gitlab.com, bitbucket.org or their raw hosts; format taken from the filename), lockfile.format plus lockfile.content (the file pasted as a string), or components [{ecosystem,name,version}]. Formats: package.json (exact pins only), package-lock.json, pnpm-lock.yaml, yarn.lock, requirements.txt, poetry.lock, uv.lock, Pipfile.lock, Cargo.lock, go.sum. Returns per-dependency verdicts (malicious, vulnerable, suspicious, clean), a summary, and data_as_of. Data is OSV.dev plus the OpenSSF Malicious Packages feed; MAL- records are a distinct malicious verdict. options.since returns only newer advisories; options.heuristics adds typosquat signals. Errors are JSON objects with an error field; input with nothing to scan is a 400. Results vary with each supplier's snapshot freshness. Limits: GET /v1/capabilities.",
+  "rpc_types": [
+    {
+      "type": "REST",
+      "intent": "expected",
+      "backend_hint": "taint-check container on :8080; mount at /",
+      "notes": "Only POST /v1/scan, GET /v1/version, GET /healthz, GET /v1/capabilities, and GET /v1/openapi.json are expected. Every response is a JSON object, including errors (which carry an 'error' field); no field carries non-JSON content."
+    }
+  ],
+  "apis": [
+    "taint-check-api",
+    "dependency-audit"
+  ],
+  "specs": [
+    {
+      "kind": "openapi",
+      "api": "taint-check-api",
+      "url": "https://agentdata.network/taint-check/openapi/v1/openapi.json",
+      "notes": "The same document is served by the backend at GET /v1/openapi.json. Add sha256 once the URL is frozen."
+    }
+  ],
+  "access": "public",
+  "results": "variable",
+  "serving": {
+    "backend": "The taint-check container (Node 22, no third-party dependencies; built from services/taint-check/backend) behind the HA RelayMiner with the rest backend pointed at it. No auth toward the backend; callers cannot send headers. On a schedule it mirrors the OSV.dev per-ecosystem all.zip archives (gs://osv-vulnerabilities, which already include the OpenSSF Malicious Packages MAL- records), builds an in-memory index, and mirrors it to a JSON snapshot on disk that is reloaded on restart; scans are served from that index, with the OSV querybatch API as an optional live backstop. Needs outbound access to storage.googleapis.com for the mirror sync, to the allowed code hosts for lockfile.url, and to the ecosystem registries for optional heuristics. CPU is light; RAM is dominated by the index, which is rebuilt off to the side during a sync. Tunable with TC_* environment variables.",
+    "implementations": [
+      "taint-check >= 1.1"
+    ],
+    "docs": "https://agentdata.network/taint-check/operators",
+    "min_disk_gb": 5,
+    "min_ram_gb": 2,
+    "healthcheck": [
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/v1/version", "method": "GET" },
+        "expect": { "json_path": "$.service", "matches": "^taint-check$" },
+        "notes": "Identity probe: pins the backend to this service so a wrong backend cannot be staked under this id."
+      },
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/healthz", "method": "GET" },
+        "expect": { "json_path": "$.status", "matches": "^ok$" },
+        "notes": "Readiness probe: 200 only once an OSV snapshot is loaded, so a supplier serving stale-empty data does not pass."
+      },
+      {
+        "rpc_type": "REST",
+        "request": {
+          "path": "/v1/scan",
+          "method": "POST",
+          "body": { "components": [ { "ecosystem": "npm", "name": "minimist", "version": "1.2.0" } ], "options": { "heuristics": false } }
+        },
+        "expect": { "json_path": "$.findings[0].verdict", "matches": "^vulnerable$" },
+        "notes": "Functional probe: minimist 1.2.0 is permanently affected by a published prototype-pollution advisory, so the verdict is stable and deterministic. Cheap; a single indexed lookup."
+      }
+    ],
+    "notes": "Every request is a POST JSON body to /v1/scan; scans finish in under a second, and fetching a lockfile.url adds up to 8 s. No rate limits to disable. Gateway operators: configure as type passthrough with rpc_types [\"rest\"] and a relay_timeout of at least 15s; see sage-service.yaml in the service repository."
+  },
+  "docs": "https://agentdata.network/taint-check/",
+  "updated": "2026-10-14"
+}

@@ -1,0 +1,122 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TaintCheck",
+    "version": "1.1.0",
+    "description": "Scans a dependency manifest for known-vulnerable and confirmed-malicious packages, backed by a local mirror of OSV.dev and the OpenSSF Malicious Packages feed. Every response is a JSON object, including errors. Served as a REST service on Pocket Network; inputs arrive in the POST body only."
+  },
+  "servers": [{ "url": "/" }],
+  "paths": {
+    "/v1/scan": {
+      "post": {
+        "summary": "Scan a manifest or component list",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ScanRequest" } }
+          }
+        },
+        "responses": {
+          "200": { "description": "Scan result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ScanResult" } } } },
+          "400": { "description": "Invalid request, including a link off the allowed hosts (url_not_allowed) and an input with nothing to scan (nothing_to_scan, unresolved entries in error.details)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "413": { "description": "Body or linked file too large", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "description": "The linked file could not be fetched (source_not_found, source_unavailable, source_deadline)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Snapshot not loaded yet", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/v1/version": {
+      "get": { "summary": "Identity probe", "responses": { "200": { "description": "Service identity", "content": { "application/json": { "schema": { "type": "object", "properties": { "service": { "type": "string" }, "version": { "type": "string" } } } } } } } }
+    },
+    "/healthz": {
+      "get": { "summary": "Readiness probe", "responses": { "200": { "description": "Ready" }, "503": { "description": "Warming: no snapshot yet" } } }
+    },
+    "/v1/capabilities": {
+      "get": { "summary": "Formats, limits, sync state", "responses": { "200": { "description": "Capabilities" } } }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ScanRequest": {
+        "type": "object",
+        "description": "Provide either lockfile or components.",
+        "properties": {
+          "op": { "type": "string", "enum": ["scan"], "default": "scan" },
+          "lockfile": {
+            "type": "object",
+            "description": "A manifest, linked (url) or pasted (content); send exactly one. A link must point at one public file on github.com, raw.githubusercontent.com, gist.githubusercontent.com, gitlab.com or bitbucket.org; a page link is fetched as the raw file. package.json lists ranges, so only exact pins are scanned; link the lockfile to scan installed versions.",
+            "properties": {
+              "url": { "type": "string", "format": "uri", "description": "Link to the manifest on an allowed public code host (GET /v1/capabilities url.hosts).", "examples": ["https://github.com/npm/cli/blob/latest/package-lock.json"] },
+              "format": { "type": "string", "enum": ["package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "requirements.txt", "poetry.lock", "uv.lock", "Pipfile.lock", "Cargo.lock", "go.sum"], "description": "Required with content; with url it is inferred from the filename when omitted." },
+              "content": { "type": "string", "description": "The raw lockfile text." },
+              "encoding": { "type": "string", "enum": ["utf8", "base64"], "default": "utf8" }
+            },
+            "oneOf": [{ "required": ["url"] }, { "required": ["content", "format"] }]
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": { "ecosystem": { "type": "string" }, "name": { "type": "string" }, "version": { "type": "string" } },
+              "required": ["ecosystem", "name", "version"]
+            }
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "since": { "type": "string", "format": "date-time", "description": "Delta mode: only advisories modified after this instant." },
+              "categories": { "type": "array", "items": { "type": "string", "enum": ["malicious", "vulnerable", "suspicious"] } },
+              "min_severity": { "type": "string", "enum": ["unknown", "low", "medium", "high", "critical"] },
+              "heuristics": { "type": "boolean", "description": "Add typosquat and, if the operator enables registry lookups, install-script and recency signals." },
+              "include_clean": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "ScanResult": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "schema_version": { "type": "string" },
+          "data_as_of": { "type": "string", "format": "date-time", "description": "When this supplier's OSV snapshot was built. Findings converge across suppliers as snapshots sync." },
+          "sources": { "type": "array", "items": { "type": "string" } },
+          "request": { "type": "object" },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "malicious": { "type": "integer" },
+              "vulnerable": { "type": "integer" },
+              "suspicious": { "type": "integer" },
+              "clean": { "type": "integer" },
+              "highest": { "type": "string" },
+              "action_required": { "type": "boolean" }
+            }
+          },
+          "findings": { "type": "array", "items": { "$ref": "#/components/schemas/Finding" } },
+          "unresolved": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "Finding": {
+        "type": "object",
+        "properties": {
+          "ecosystem": { "type": "string" },
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "verdict": { "type": "string", "enum": ["malicious", "vulnerable", "suspicious", "clean"] },
+          "malicious": { "type": "array", "items": { "type": "object" } },
+          "vulnerabilities": { "type": "array", "items": { "type": "object" } },
+          "signals": { "type": "array", "items": { "type": "object" } },
+          "recommendation": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "service": { "type": "string" },
+          "schema_version": { "type": "string" },
+          "error": { "type": "object", "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "details": { "type": "object", "description": "Present on some codes, e.g. nothing_to_scan lists the unresolved entries." } } }
+        }
+      }
+    }
+  }
+}

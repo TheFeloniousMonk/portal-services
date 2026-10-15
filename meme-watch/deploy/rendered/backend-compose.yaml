@@ -1,0 +1,21 @@
+# meme-watch backend on the supplier host. Starts only the backend container and
+# joins the supplier stack's network (templates/ha/docker-compose.yaml), where the
+# relayer reaches it as http://meme-watch-backend:8080. Nothing is exposed to the
+# internet. Put it in /opt/pocket/services/meme-watch/deploy/ next to backend/.
+#
+#   docker compose -p meme-watch up -d --build
+
+services:
+  backend:
+    build: ../backend
+    image: meme-watch-backend:latest
+    container_name: meme-watch-backend
+    restart: unless-stopped
+    expose:
+      - "8080"
+    networks: [supplier]
+
+networks:
+  supplier:
+    external: true
+    name: pocket-supplier

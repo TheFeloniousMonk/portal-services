@@ -1,0 +1,54 @@
+# meme-watch backend on the supplier host (Cherry).
+#
+# One supplier serves every service it is staked for through one HA RelayMiner stack.
+# That stack (redis + miner + relayer + Caddy) lives in /opt/pocket/supplier (see
+# servers/cherry/) and owns the network below. This file adds only the Meme Watch
+# backend to that network; the relayer reaches it as http://meme-watch-backend:8080
+# once relayer-service.yaml is merged into the relayer config (see add-to-relayer.sh).
+# Nothing here is exposed to the internet.
+#
+# Requires a .env file beside this one holding MW_DEXPAPRIKA_API_KEY (see .env.example).
+#
+#   docker compose -f docker-compose.yaml up -d --build
+
+services:
+  backend:
+    build: ../backend
+    image: meme-watch-backend:1.0.0
+    container_name: meme-watch-backend
+    restart: unless-stopped
+    environment:
+      # Per-supplier upstream credential. Compose reads .env from this directory.
+      MW_DEXPAPRIKA_API_KEY: ${MW_DEXPAPRIKA_API_KEY:?set MW_DEXPAPRIKA_API_KEY in deploy/.env}
+      # api-pro.dexpaprika.com answers this host with a Cloudflare block page
+      # (403, every request since 2026-09-20). The public API serves both calls
+      # and the same filters; it ignores the key header (plan: keyless).
+      MW_DEXPAPRIKA_BASE_URL: "https://api.dexpaprika.com"
+      MW_WINDOW_MINUTES: "60"
+      MW_POLL_INTERVAL_MS: "120000"
+      # The credit governor. 4 calls per poll is about 86,400 a month, inside a
+      # 100,000-credit free key with the margin MW_MONTHLY_CREDITS keeps back.
+      MW_MAX_CALLS_PER_POLL: "4"
+      MW_MAX_LIST_PAGES: "2"
+      MW_MONTHLY_CREDITS: "95000"
+      MW_COLDSTART_EXTRA_CALLS: "60"
+      # The traction gate, and the editorial decision in this service. Measured
+      # on 2026-09-20: these admit about 61 launches an hour, one upstream page,
+      # which the enrichment budget can keep up with. Lowering them needs a
+      # paid upstream plan, not just a larger number here.
+      MW_GATE_MIN_VOLUME_USD: "50000"
+      MW_GATE_MIN_TXNS: "100"
+    volumes:
+      - meme-watch-data:/data
+    mem_limit: 256m
+    expose:
+      - "8080"
+    networks: [supplier]
+
+volumes:
+  meme-watch-data:
+
+networks:
+  supplier:
+    external: true
+    name: pocket-supplier

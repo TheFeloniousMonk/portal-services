@@ -1,0 +1,53 @@
+# taint-check backend on the supplier host (Cherry).
+#
+# One supplier serves every service it is staked for through one HA RelayMiner stack.
+# That stack (redis + miner + relayer + Caddy) lives in /opt/pocket/supplier (see
+# servers/cherry/) and owns the network below. This file adds only the TaintCheck
+# backend to that network; the relayer reaches it as http://taint-check-backend:8080
+# once relayer-service.yaml is merged into the relayer config (see add-to-relayer.sh).
+# Nothing here is exposed to the internet.
+#
+# No secret is needed: the OSV bucket is public. The backend does need outbound
+# HTTPS to storage.googleapis.com for the mirror sync (and, only if registry
+# lookups are enabled, to the ecosystem registries).
+#
+#   docker compose -f docker-compose.yaml up -d --build
+#
+# The first boot on an empty volume runs a full mirror sync before /healthz turns
+# ok; give it a few minutes. On restart it reloads the on-disk snapshot instantly.
+
+services:
+  backend:
+    build: ../backend
+    image: taint-check-backend:1.1.0
+    container_name: taint-check-backend
+    restart: unless-stopped
+    environment:
+      # Ecosystems to mirror. Trim this to lower disk and memory; npm and PyPI
+      # dominate both.
+      TC_ECOSYSTEMS: "npm,PyPI,crates.io,Go"
+      TC_SYNC_INTERVAL_MS: "21600000"
+      TC_SYNC_ON_START: "true"
+      # Optional Tier-2 signals that need registry egress; off by default so a
+      # relay never waits on the network.
+      TC_REGISTRY_LOOKUPS: "false"
+      # Optional live OSV querybatch backstop for versions newer than the last
+      # snapshot; off by default.
+      TC_USE_API_BACKSTOP: "false"
+    volumes:
+      - taint-check-data:/data
+    # The index is held in memory and rebuilt off to the side during a sync, so
+    # peak use is roughly twice steady state. Leave headroom; drop TC_ECOSYSTEMS
+    # if the host is tight.
+    mem_limit: 2048m
+    expose:
+      - "8080"
+    networks: [supplier]
+
+volumes:
+  taint-check-data:
+
+networks:
+  supplier:
+    external: true
+    name: pocket-supplier

@@ -1,0 +1,334 @@
+// Smoke test. No network access and no upstream credits are spent: the server
+// is started with polling disabled and every fixture is a recorded response.
+//
+// Run with: npm test
+
+import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
+
+import {
+  memeTokenOf,
+  tractionFrom,
+  enrichmentFrom,
+  toCsv,
+  parseCsv,
+  LaunchTable,
+  COLUMNS,
+} from "../store.js";
+import { DexPaprika } from "../dexpaprika.js";
+
+const WSOL = "So11111111111111111111111111111111111111112";
+let failures = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    console.log("  ok   " + name);
+  } catch (err) {
+    failures++;
+    console.log("  FAIL " + name);
+    console.log("       " + (err && err.message));
+  }
+}
+
+async function testAsync(name, fn) {
+  try {
+    await fn();
+    console.log("  ok   " + name);
+  } catch (err) {
+    failures++;
+    console.log("  FAIL " + name);
+    console.log("       " + (err && err.message));
+  }
+}
+
+// Recorded from the live API on 2026-09-20.
+const LIST_ROW = {
+  id: "ER2QrAJa3Rw1wXfWrJ9PuoVBBb9sGgNuVA1NXeHzW3wS",
+  dex_id: "pumpfun",
+  chain: "solana",
+  volume_usd_24h: 9789.171957105846,
+  created_at: "2026-09-20T10:50:45Z",
+  transactions_24h: 342,
+  price_usd: 0.0000032697432553045953,
+  price_change_percentage_5m: -56.98516045994477,
+  price_change_percentage_24h: 0,
+  liquidity_usd: 4490.585153781271,
+  tokens: [
+    { id: WSOL, chain: "solana", has_image: true },
+    { id: "5c7dFoif6LhcQqbBF9qSSXQvSywWQoDCjWdhvNLMpump", chain: "solana", has_image: true },
+  ],
+};
+
+const POOL_DETAILS = {
+  id: "ER2QrAJa3Rw1wXfWrJ9PuoVBBb9sGgNuVA1NXeHzW3wS",
+  dex_id: "pumpfun",
+  base_token_id: "5c7dFoif6LhcQqbBF9qSSXQvSywWQoDCjWdhvNLMpump",
+  quote_token_id: WSOL,
+  created_at: "2026-09-20T10:50:45Z",
+  tokens: [
+    { id: WSOL, name: "Wrapped SOL", symbol: "SOL", decimals: 9, has_image: true, fdv: 1052502882.6 },
+    {
+      id: "5c7dFoif6LhcQqbBF9qSSXQvSywWQoDCjWdhvNLMpump",
+      name: "PermanentlyEmploylessPumpEnjoyer",
+      symbol: "PEPE",
+      decimals: 6,
+      total_supply: 1000000000000000,
+      website: "https://otcdesks.cash/coin/5c7dFoif",
+      has_image: true,
+      fdv: 4764.584966188878,
+    },
+  ],
+  token_reserves: [
+    { token_id: WSOL, reserve: 256387859, reserve_usd: 27.736259038316255 },
+    { token_id: "5c7dFoif6LhcQqbBF9qSSXQvSywWQoDCjWdhvNLMpump", reserve: 784007571989091, reserve_usd: 3735.47 },
+  ],
+  liquidity_usd: 2586.1332229521972,
+  last_price_usd: 0.000004764584966188878,
+  price_stats: { high_24h: null, low_24h: null, ath: 0.000007599976195315843, ath_date: "2026-09-20T10:51:00Z" },
+  twitter: "https://x.com/UltraGigaDeploy/status/2101625050637947346",
+  "24h": { volume_usd: 9889.91, buy_usd: 5448.03, sell_usd: 4441.87, sells: 177, buys: 169, txns: 346 },
+};
+
+console.log("store");
+
+test("picks the memecoin, not the quote asset", () => {
+  assert.equal(memeTokenOf(LIST_ROW.tokens), "5c7dFoif6LhcQqbBF9qSSXQvSywWQoDCjWdhvNLMpump");
+});
+
+test("traction carries since-launch totals and derives volume per transaction", () => {
+  const t = tractionFrom(LIST_ROW);
+  assert.equal(t.txns, 342);
+  assert.equal(t.volume_usd, 9789.171957105846);
+  // Stored to four decimal places, so compare at that precision.
+  assert.equal(t.vol_per_txn, Number((9789.171957105846 / 342).toFixed(4)));
+  assert.equal(t.price_change_5m, -56.9852);
+  assert.equal(t.dex_id, "pumpfun");
+});
+
+test("enrichment takes identity, the buy and sell split, and the true reserve", () => {
+  const e = enrichmentFrom(POOL_DETAILS);
+  assert.equal(e.name, "PermanentlyEmploylessPumpEnjoyer");
+  assert.equal(e.symbol, "PEPE");
+  assert.equal(e.buys, 169);
+  assert.equal(e.sells, 177);
+  // The quote-side reserve, not the headline liquidity_usd of 2586.
+  assert.equal(e.quote_reserve_usd, 27.736259038316255);
+  assert.ok(e.twitter.startsWith("https://x.com/"));
+});
+
+test("total supply is scaled out of base units so price times supply is the fdv", () => {
+  const e = enrichmentFrom(POOL_DETAILS);
+  assert.equal(e.decimals, 6);
+  assert.equal(e.total_supply, 1000000000);
+  const implied = e.total_supply * 0.000004764584966188878;
+  assert.ok(Math.abs(implied - e.fdv_usd) < 1e-6);
+});
+
+test("drawdown from the all-time high is computed", () => {
+  const e = enrichmentFrom(POOL_DETAILS);
+  assert.ok(e.drawdown_from_ath_pct < -36 && e.drawdown_from_ath_pct > -38);
+});
+
+test("csv survives a round trip, including commas and quotes in a name", () => {
+  const rows = [
+    { ...tractionFrom(LIST_ROW), ...enrichmentFrom(POOL_DETAILS), pool_address: LIST_ROW.id, first_seen: "2026-09-20T10:52:00Z" },
+    { ...tractionFrom(LIST_ROW), pool_address: "X2", first_seen: "2026-09-20T10:52:00Z", name: 'He said "buy", loudly', symbol: "A,B" },
+  ];
+  const parsed = parseCsv(toCsv(rows));
+  assert.equal(parsed.length, 2);
+  assert.equal(parsed[0].symbol, "PEPE");
+  assert.equal(parsed[0].txns, 342);
+  assert.equal(parsed[1].name, 'He said "buy", loudly');
+  assert.equal(parsed[1].symbol, "A,B");
+});
+
+test("csv header matches the declared columns", () => {
+  assert.equal(toCsv([]).trim(), COLUMNS.join(","));
+});
+
+console.log("window");
+
+test("prune drops rows past the window and keeps the rest", async () => {
+  const table = new LaunchTable(tmpdir(), "unused.csv", 60);
+  const now = Date.parse("2026-09-20T12:00:00Z");
+  table.insert("fresh", { created_at: "2026-09-20T11:30:00Z" }, { symbol: "A" });
+  table.insert("old", { created_at: "2026-09-20T10:30:00Z" }, { symbol: "B" });
+  table.insert("broken", { created_at: "" }, { symbol: "C" });
+  const dropped = table.prune(now);
+  assert.equal(dropped, 2);
+  assert.equal(table.size, 1);
+  assert.ok(table.has("fresh"));
+});
+
+test("refresh updates a held row and reports an unknown one", () => {
+  const table = new LaunchTable(tmpdir(), "unused.csv", 60);
+  table.insert("p1", tractionFrom(LIST_ROW), enrichmentFrom(POOL_DETAILS));
+  assert.equal(table.refresh("p1", { volume_usd: 12345, txns: 400 }), true);
+  assert.equal(table.all()[0].volume_usd, 12345);
+  // Identity survives a traction refresh.
+  assert.equal(table.all()[0].symbol, "PEPE");
+  assert.equal(table.refresh("nope", { volume_usd: 1 }), false);
+});
+
+console.log("upstream guards");
+
+test("a dropped filter is detected from the echoed query", () => {
+  const good = { query: { created_after: 1, txns_24h_min: 1, volume_usd_24h_min: 1 } };
+  assert.deepEqual(DexPaprika.assertFilters(good, { created_after: 1, volume_usd_24h_min: 1 }), []);
+  // volume_24h_min is the spelling the REST API silently ignores.
+  const bad = { query: { created_after: 1, txns_24h_min: 1 } };
+  assert.deepEqual(DexPaprika.assertFilters(bad, { volume_usd_24h_min: 1 }), ["volume_usd_24h_min"]);
+});
+
+// ---------------------------------------------------------------------------
+// HTTP contract
+
+async function withServer(fn) {
+  const dir = await mkdtemp(join(tmpdir(), "meme-watch-"));
+  const port = 8100 + Math.floor(Math.random() * 400);
+  const child = spawn(process.execPath, [fileURLToPath(new URL("../server.js", import.meta.url))], {
+    env: { ...process.env, PORT: String(port), MW_DATA_DIR: dir, MW_POLL_ON_START: "false", MW_DEXPAPRIKA_API_KEY: "" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("server did not start in 10s")), 10000);
+      child.stdout.on("data", (buf) => {
+        if (String(buf).includes("listening")) {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        reject(new Error("server exited early with code " + code));
+      });
+    });
+    await fn(`http://127.0.0.1:${port}`);
+  } finally {
+    child.kill("SIGKILL");
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+console.log("http");
+
+await withServer(async (base) => {
+  const seen = [];
+
+  const call = async (path, init) => {
+    const res = await fetch(base + path, init);
+    const text = await res.text();
+    seen.push({ path, text });
+    return { res, text, json: JSON.parse(text) };
+  };
+
+  await testAsync("the root ping answers 2xx for the RelayMiner", async () => {
+    const { res, json } = await call("/");
+    assert.equal(res.status, 200);
+    assert.equal(json.service, "meme-watch");
+  });
+
+  await testAsync("HEAD on the root is accepted", async () => {
+    const res = await fetch(base + "/", { method: "HEAD" });
+    assert.equal(res.status, 200);
+  });
+
+  await testAsync("the identity probe pins the service id", async () => {
+    const { res, json } = await call("/v1/version");
+    assert.equal(res.status, 200);
+    assert.match(json.service, /^meme-watch$/);
+  });
+
+  await testAsync("readiness reports warming before the first poll", async () => {
+    const { res, json } = await call("/healthz");
+    assert.equal(res.status, 503);
+    assert.equal(json.status, "warming");
+  });
+
+  await testAsync("capabilities reports the window and the upstream budget", async () => {
+    const { json } = await call("/v1/capabilities");
+    assert.equal(json.window_minutes, 60);
+    assert.equal(json.poll_interval_seconds, 120);
+    assert.ok(json.upstream.monthly_credit_budget > 0);
+    assert.deepEqual(json.formats, ["json", "csv"]);
+  });
+
+  await testAsync("the functional probe returns the window with an empty body", async () => {
+    const { res, json } = await call("/v1/launches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(res.status, 200);
+    assert.equal(json.window_minutes, 60);
+    assert.equal(json.count, 0);
+    assert.ok(Array.isArray(json.launches));
+    assert.ok(typeof json.complete_before === "string");
+  });
+
+  await testAsync("csv format rides in a string field", async () => {
+    const { json } = await call("/v1/launches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ format: "csv" }),
+    });
+    assert.equal(json.format, "csv");
+    assert.equal(typeof json.csv, "string");
+    assert.ok(json.csv.startsWith("pool_address,"));
+  });
+
+  await testAsync("an unknown sort is a 400 with a JSON error", async () => {
+    const { res, json } = await call("/v1/launches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sort: "nope" }),
+    });
+    assert.equal(res.status, 400);
+    assert.equal(json.error.code, "invalid_request");
+  });
+
+  await testAsync("a GET on the query path is refused, as a JSON object", async () => {
+    const { res, json } = await call("/v1/launches");
+    assert.equal(res.status, 405);
+    assert.ok(json.error);
+  });
+
+  await testAsync("an unknown path is a JSON 404", async () => {
+    const { res, json } = await call("/v1/nope");
+    assert.equal(res.status, 404);
+    assert.equal(json.error.code, "not_found");
+  });
+
+  await testAsync("every body starts with a brace and none is empty", async () => {
+    for (const { path, text } of seen) {
+      assert.ok(text.length > 0, path + " returned an empty body");
+      assert.equal(text[0], "{", path + " did not start with a brace");
+    }
+  });
+
+  await testAsync("no success body carries wording a gateway penalises", async () => {
+    const banned = [
+      "timeout",
+      "connection refused",
+      "connection reset",
+      "bad gateway",
+      "service unavailable",
+      "gateway timeout",
+    ];
+    for (const { path, text } of seen) {
+      const head = text.slice(0, 2048).toLowerCase();
+      for (const word of banned) {
+        assert.ok(!head.includes(word), path + " contains " + word + " in the first 2 KB");
+      }
+    }
+  });
+});
+
+console.log(failures ? `\n${failures} test(s) failed` : "\nall tests passed");
+process.exit(failures ? 1 : 0);

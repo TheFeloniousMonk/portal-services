@@ -1,0 +1,56 @@
+{
+  "schema": "pocket-service-card/v1",
+  "description": "infiniFi Data: read-only infiniFi protocol data for agents, passed through from the infiniFi API (api.infinifi.xyz). Every endpoint is a POST with a JSON body. Protocol: /v1/overview (TVL, liquid/illiquid split, iUSD/siUSD supply and rates), /v1/yields (siUSD and liUSD 1-13 week tier APYs), /v1/farms and /v1/farm (where USDC is deployed, APY, assets, maturity), /v1/params, /v1/redemption-queue, /v1/redemption-quote, /v1/allocation-votes, /v1/opportunities (partner yields with infiniFi's own links). Wallet, by address: /v1/wallet summary, /v1/wallet/pnl, /history (7/30/90/365 days or all), /unwinding, /redemptions, /votes, /points. APYs are fractions; amounts are whole tokens. Every response is a JSON object with fetched_at and stale. Never signs or prepares a transaction. Not affiliated with infiniFi. Endpoint list: GET /v1/capabilities.",
+  "rpc_types": [
+    {
+      "type": "REST",
+      "intent": "expected",
+      "backend_hint": "infinifi container on :8080; mount at /",
+      "notes": "POST /v1/<endpoint> with a JSON body (endpoints without required input also answer GET), plus GET /v1/version, /healthz, /v1/capabilities, /v1/openapi.json. Every response is a JSON object, including errors (which carry an 'error' field)."
+    }
+  ],
+  "apis": [
+    "infinifi-api"
+  ],
+  "specs": [
+    {
+      "kind": "openapi",
+      "api": "infinifi-api",
+      "url": "https://agentdata.network/infinifi/openapi/v1/openapi.json",
+      "notes": "The same document is served by the backend at GET /v1/openapi.json. Add sha256 once the URL is frozen."
+    }
+  ],
+  "access": "public",
+  "results": "variable",
+  "serving": {
+    "backend": "The infinifi container (Node 22, no third-party dependencies; built from github.com/TheFeloniousMonk/portal-services, infinifi/backend) behind the HA RelayMiner with the rest backend pointed at it. A stateless pass-through: each relay makes one to five GETs to the public infiniFi API, which needs no key. Protocol-wide reads are cached in memory for 60 s (votes and opportunities 300 s) and served stale for up to 15 minutes if the upstream is down; wallet reads are never cached. Needs outbound HTTPS to api.infinifi.xyz. Light on CPU and RAM. Tunable with IF_* environment variables.",
+    "implementations": [
+      "infinifi >= 1.0"
+    ],
+    "docs": "https://agentdata.network/infinifi/operators",
+    "min_ram_gb": 1,
+    "healthcheck": [
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/v1/version", "method": "GET" },
+        "expect": { "json_path": "$.service", "matches": "^infinifi$" },
+        "notes": "Identity probe: pins the backend to this service so a wrong backend cannot be staked under this id."
+      },
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/healthz", "method": "GET" },
+        "expect": { "json_path": "$.status", "matches": "^ok$" },
+        "notes": "Readiness probe: 200 only while the infiniFi protocol data can be served, fresh or from the 15-minute stale window."
+      },
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/v1/yields", "method": "POST", "body": {} },
+        "expect": { "json_path": "$.staked.token", "matches": "^siUSD$" },
+        "notes": "Functional probe: the staked token is always siUSD, so the check is stable while the APYs change. Served from the shared 60 s cache."
+      }
+    ],
+    "notes": "Answers in well under a second when cached and within the 8 s upstream deadline otherwise. No rate limits to disable. Gateway operators: configure as type passthrough with rpc_types [\"rest\"] and a relay_timeout of at least 15s; see sage-service.yaml in the service repository."
+  },
+  "docs": "https://agentdata.network/infinifi/",
+  "updated": "2026-10-15"
+}

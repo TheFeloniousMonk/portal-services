@@ -1,0 +1,17 @@
+{
+  "name": "taint-check",
+  "version": "1.0.0",
+  "description": "TaintCheck: scans a dependency manifest for known-vulnerable and confirmed-malicious packages, served as a REST service on Pocket Network. Mirrors OSV.dev (including the OpenSSF Malicious Packages feed) into a local index and answers every relay from it.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  },
+  "dependencies": {}
+}

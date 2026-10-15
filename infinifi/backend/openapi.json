@@ -1,0 +1,3086 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "infiniFi Data (Pocket Network service)",
+    "version": "1.0.0",
+    "description": "Read-only pass-through to the infiniFi protocol API (api.infinifi.xyz), served on Pocket Network as service `infinifi`. Every input is a JSON body; every response, errors included, is a JSON object. APYs are fractions (0.062 = 6.2%); token amounts are whole tokens. The service never signs, prepares, or submits a transaction. Not affiliated with infiniFi."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/v1/version": {
+      "get": {
+        "summary": "Identity probe",
+        "operationId": "get_identity",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Readiness: ok while the infiniFi protocol data can be served",
+        "operationId": "get_readiness:",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": "string"
+                    },
+                    "stale": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "summary": "Capabilities: endpoints, cache, limits, upstream state",
+        "operationId": "get_capabilities:",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "endpoints": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/overview": {
+      "post": {
+        "summary": "Protocol headline",
+        "description": "TVL and its liquid/illiquid split, iUSD and siUSD supply and exchange rates, siUSD APYs, lock-tier and farm counts.",
+        "operationId": "post_overview",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "asset": {
+                      "type": "object"
+                    },
+                    "iusd": {
+                      "type": "object"
+                    },
+                    "siusd": {
+                      "type": "object",
+                      "properties": {
+                        "apy": {
+                          "type": "object",
+                          "description": "APYs as fractions (0.062 = 6.2%)",
+                          "properties": {
+                            "d1": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "d7": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "d30": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "last_week": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "lock_tiers": {
+                      "type": "object"
+                    },
+                    "farms": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Protocol headline",
+        "description": "TVL and its liquid/illiquid split, iUSD and siUSD supply and exchange rates, siUSD APYs, lock-tier and farm counts.",
+        "operationId": "get_overview",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "asset": {
+                      "type": "object"
+                    },
+                    "iusd": {
+                      "type": "object"
+                    },
+                    "siusd": {
+                      "type": "object",
+                      "properties": {
+                        "apy": {
+                          "type": "object",
+                          "description": "APYs as fractions (0.062 = 6.2%)",
+                          "properties": {
+                            "d1": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "d7": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "d30": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "last_week": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "lock_tiers": {
+                      "type": "object"
+                    },
+                    "farms": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/yields": {
+      "post": {
+        "summary": "Staking and lock-tier yields",
+        "description": "siUSD and every liUSD lock tier (1 to 13 weeks): exchange rate, 1/7/30-day APY, amount locked. A tier holding less than empty_tier_threshold_iusd is flagged empty (several hold only a placeholder deposit).",
+        "operationId": "post_yields",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "empty_tier_threshold_iusd": {
+                      "type": "number"
+                    },
+                    "staked": {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "type": "string"
+                        },
+                        "apy": {
+                          "type": "object",
+                          "description": "APYs as fractions (0.062 = 6.2%)",
+                          "properties": {
+                            "d1": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "d7": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "d30": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "last_week": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "locked": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "weeks": {
+                            "type": "integer"
+                          },
+                          "token": {
+                            "type": "string"
+                          },
+                          "address": {
+                            "type": "string"
+                          },
+                          "exchange_rate": {
+                            "type": "number"
+                          },
+                          "supply": {
+                            "type": "number"
+                          },
+                          "total_locked_iusd": {
+                            "type": "number"
+                          },
+                          "apy": {
+                            "type": "object",
+                            "description": "APYs as fractions (0.062 = 6.2%)",
+                            "properties": {
+                              "d1": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "d7": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "d30": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "last_week": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              }
+                            }
+                          },
+                          "empty": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "min_weeks": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "max_weeks": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "include_empty": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Staking and lock-tier yields",
+        "description": "siUSD and every liUSD lock tier (1 to 13 weeks): exchange rate, 1/7/30-day APY, amount locked. A tier holding less than empty_tier_threshold_iusd is flagged empty (several hold only a placeholder deposit).",
+        "operationId": "get_yields",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "empty_tier_threshold_iusd": {
+                      "type": "number"
+                    },
+                    "staked": {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "type": "string"
+                        },
+                        "apy": {
+                          "type": "object",
+                          "description": "APYs as fractions (0.062 = 6.2%)",
+                          "properties": {
+                            "d1": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "d7": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "d30": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            },
+                            "last_week": {
+                              "type": [
+                                "number",
+                                "null"
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "locked": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "weeks": {
+                            "type": "integer"
+                          },
+                          "token": {
+                            "type": "string"
+                          },
+                          "address": {
+                            "type": "string"
+                          },
+                          "exchange_rate": {
+                            "type": "number"
+                          },
+                          "supply": {
+                            "type": "number"
+                          },
+                          "total_locked_iusd": {
+                            "type": "number"
+                          },
+                          "apy": {
+                            "type": "object",
+                            "description": "APYs as fractions (0.062 = 6.2%)",
+                            "properties": {
+                              "d1": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "d7": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "d30": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              },
+                              "last_week": {
+                                "type": [
+                                  "number",
+                                  "null"
+                                ]
+                              }
+                            }
+                          },
+                          "empty": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/farms": {
+      "post": {
+        "summary": "Farms",
+        "description": "Where infiniFi's USDC is deployed, with APY, assets (USDC terms), maturity, and redemption bucket.",
+        "operationId": "post_farms",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "farms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "address": {
+                            "type": "string"
+                          },
+                          "chain": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "liquid",
+                              "illiquid",
+                              "protocol"
+                            ]
+                          },
+                          "paused": {
+                            "type": "boolean"
+                          },
+                          "apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_base": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_rewards": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "avg_apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "exit_apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_note": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "assets_usdc": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "bucket_weeks": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "maturity": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "underlying": {
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "l2_liquidity": {
+                            "type": "boolean"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chain": {
+                    "type": "string",
+                    "enum": [
+                      "ethereum",
+                      "mainnet",
+                      "base",
+                      "monad"
+                    ],
+                    "description": "Chain (case-insensitive; mainnet = ethereum)"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "liquid",
+                      "illiquid",
+                      "protocol"
+                    ]
+                  },
+                  "include_paused": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "min_apy": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "sort": {
+                    "type": "string",
+                    "enum": [
+                      "apy",
+                      "assets"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Farms",
+        "description": "Where infiniFi's USDC is deployed, with APY, assets (USDC terms), maturity, and redemption bucket.",
+        "operationId": "get_farms",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "farms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "address": {
+                            "type": "string"
+                          },
+                          "chain": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "liquid",
+                              "illiquid",
+                              "protocol"
+                            ]
+                          },
+                          "paused": {
+                            "type": "boolean"
+                          },
+                          "apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_base": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_rewards": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "avg_apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "exit_apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_note": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "assets_usdc": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "bucket_weeks": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "maturity": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "underlying": {
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "l2_liquidity": {
+                            "type": "boolean"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/farm": {
+      "post": {
+        "summary": "One farm",
+        "description": "By address, or by name (exact first, then substring). Returns every match, since one name can exist on several chains. No match is 422 farm_not_found.",
+        "operationId": "post_farm",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "farms": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "address": {
+                            "type": "string"
+                          },
+                          "chain": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "liquid",
+                              "illiquid",
+                              "protocol"
+                            ]
+                          },
+                          "paused": {
+                            "type": "boolean"
+                          },
+                          "apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_base": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_rewards": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "avg_apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "exit_apy": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "apy_note": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "assets_usdc": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "bucket_weeks": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "maturity": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "underlying": {
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "l2_liquidity": {
+                            "type": "boolean"
+                          },
+                          "description": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100
+                  }
+                },
+                "additionalProperties": false,
+                "description": "address or name"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/params": {
+      "post": {
+        "summary": "Protocol parameters",
+        "description": "Reserve ratio, illiquid target, return multipliers, and per-week bucket multipliers.",
+        "operationId": "post_params",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "reserve_ratio": {
+                      "type": "number"
+                    },
+                    "illiquid_target_ratio": {
+                      "type": "number"
+                    },
+                    "bucket_multipliers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "weeks": {
+                            "type": "integer"
+                          },
+                          "multiplier": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Protocol parameters",
+        "description": "Reserve ratio, illiquid target, return multipliers, and per-week bucket multipliers.",
+        "operationId": "get_params",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "reserve_ratio": {
+                      "type": "number"
+                    },
+                    "illiquid_target_ratio": {
+                      "type": "number"
+                    },
+                    "bucket_multipliers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "weeks": {
+                            "type": "integer"
+                          },
+                          "multiplier": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/redemption-queue": {
+      "post": {
+        "summary": "Redemption queue",
+        "description": "The global iUSD redemption queue.",
+        "operationId": "post_redemption_queue",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "total_enqueued_iusd": {
+                      "type": "number"
+                    },
+                    "fully_funded_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updated_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "tickets": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Redemption queue",
+        "description": "The global iUSD redemption queue.",
+        "operationId": "get_redemption_queue",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "total_enqueued_iusd": {
+                      "type": "number"
+                    },
+                    "fully_funded_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "updated_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "tickets": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/redemption-quote": {
+      "post": {
+        "summary": "Redemption quote",
+        "description": "Whether redeeming amount_iusd now pays USDC directly or joins the queue.",
+        "operationId": "post_redemption_quote",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "amount_iusd": {
+                      "type": "number"
+                    },
+                    "directly_redeemable": {
+                      "type": "boolean"
+                    },
+                    "usdc_redeemable_now": {
+                      "type": "number"
+                    },
+                    "iusd_enqueued": {
+                      "type": "number"
+                    },
+                    "usdc_missing": {
+                      "type": "number"
+                    },
+                    "fully_funded_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount_iusd": {
+                    "type": [
+                      "number",
+                      "string"
+                    ],
+                    "description": "iUSD in whole tokens, e.g. 2500.5"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "amount_iusd"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/allocation-votes": {
+      "post": {
+        "summary": "Allocation votes",
+        "description": "How votes split funds across farms for an epoch. An epoch out of range is 422 epoch_out_of_range naming the accepted epochs.",
+        "operationId": "post_allocation_votes",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "epoch": {
+                      "type": "integer"
+                    },
+                    "liquid": {
+                      "type": "object"
+                    },
+                    "illiquid": {
+                      "type": "object"
+                    },
+                    "locked_token_votes": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "epoch": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Allocation-voting epoch. Default: the current one. infiniFi accepts only the current epoch and its neighbours."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Allocation votes",
+        "description": "How votes split funds across farms for an epoch. An epoch out of range is 422 epoch_out_of_range naming the accepted epochs.",
+        "operationId": "get_allocation_votes",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "epoch": {
+                      "type": "integer"
+                    },
+                    "liquid": {
+                      "type": "object"
+                    },
+                    "illiquid": {
+                      "type": "object"
+                    },
+                    "locked_token_votes": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/opportunities": {
+      "post": {
+        "summary": "Partner opportunities",
+        "description": "Partner yield opportunities for infiniFi tokens with APY, TVL, points multipliers, dates, and infiniFi's own link (no amounts are prefilled).",
+        "operationId": "post_opportunities",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "opportunities": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "chain": {
+                    "type": "string",
+                    "enum": [
+                      "ethereum",
+                      "mainnet",
+                      "base",
+                      "monad"
+                    ],
+                    "description": "Chain (case-insensitive; mainnet = ethereum)"
+                  },
+                  "protocol": {
+                    "type": "string"
+                  },
+                  "asset": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Partner opportunities",
+        "description": "Partner yield opportunities for infiniFi tokens with APY, TVL, points multipliers, dates, and infiniFi's own link (no amounts are prefilled).",
+        "operationId": "get_opportunities",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "opportunities": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet": {
+      "post": {
+        "summary": "Wallet summary",
+        "description": "Current value, profit, unwinding positions, redemptions, and points in one call. Parts infiniFi could not answer are null and listed in missing.",
+        "operationId": "post_wallet",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "value_usd": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "value_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "pnl_iusd": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "unwinding": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "redemptions": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "points": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "missing": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{40}$",
+                    "description": "Wallet address",
+                    "example": "0x46a83dc1a264bff133db887023d2884167094837"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "address"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/pnl": {
+      "post": {
+        "summary": "Wallet profit",
+        "description": "Profit in iUSD from staked, locked (per tier), and unwinding positions, overall and by chain.",
+        "operationId": "post_wallet_pnl",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "staked": {
+                      "type": "number"
+                    },
+                    "locked_total": {
+                      "type": "number"
+                    },
+                    "locked": {
+                      "type": "array"
+                    },
+                    "unwinding": {
+                      "type": "number"
+                    },
+                    "by_chain": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{40}$",
+                    "description": "Wallet address",
+                    "example": "0x46a83dc1a264bff133db887023d2884167094837"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "address"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/history": {
+      "post": {
+        "summary": "Wallet history",
+        "description": "Value (tvl) or profit (pnl) in USD over 7, 30, 90, 365 days, or all (a weekly series since the wallet's first position).",
+        "operationId": "post_wallet_history",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "days": {},
+                    "unit": {
+                      "type": "string"
+                    },
+                    "latest": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    },
+                    "by_chain": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{40}$",
+                    "description": "Wallet address",
+                    "example": "0x46a83dc1a264bff133db887023d2884167094837"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "tvl",
+                      "pnl"
+                    ],
+                    "default": "tvl"
+                  },
+                  "days": {
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "enum": [
+                          7,
+                          30,
+                          90,
+                          365
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "all"
+                        ]
+                      }
+                    ],
+                    "default": 30
+                  },
+                  "by_chain": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "address"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/unwinding": {
+      "post": {
+        "summary": "Wallet unwinding",
+        "description": "Positions currently unlocking.",
+        "operationId": "post_wallet_unwinding",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "positions": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{40}$",
+                    "description": "Wallet address",
+                    "example": "0x46a83dc1a264bff133db887023d2884167094837"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "address"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/redemptions": {
+      "post": {
+        "summary": "Wallet redemptions",
+        "description": "Place in the redemption queue and USDC claimable.",
+        "operationId": "post_wallet_redemptions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "claimable_usdc": {
+                      "type": "number"
+                    },
+                    "enqueued_iusd": {
+                      "type": "number"
+                    },
+                    "fully_funded_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "tickets": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{40}$",
+                    "description": "Wallet address",
+                    "example": "0x46a83dc1a264bff133db887023d2884167094837"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "address"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/votes": {
+      "post": {
+        "summary": "Wallet votes",
+        "description": "The wallet's allocation votes for an epoch.",
+        "operationId": "post_wallet_votes",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "epoch": {
+                      "type": "integer"
+                    },
+                    "liquid": {
+                      "type": "object"
+                    },
+                    "illiquid": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{40}$",
+                    "description": "Wallet address",
+                    "example": "0x46a83dc1a264bff133db887023d2884167094837"
+                  },
+                  "epoch": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Allocation-voting epoch. Default: the current one. infiniFi accepts only the current epoch and its neighbours."
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "address"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/points": {
+      "post": {
+        "summary": "Wallet points",
+        "description": "Rank, finalized total, current episode and chapter, multipliers, per-chapter points; detail adds per-source points.",
+        "operationId": "post_wallet_points",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "service": {
+                      "type": "string",
+                      "const": "infinifi"
+                    },
+                    "schema_version": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "fetched_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time",
+                      "description": "When infiniFi answered (the oldest part, for combined endpoints)"
+                    },
+                    "stale": {
+                      "type": "boolean",
+                      "description": "true when infiniFi was unreachable and a cached copy (at most 15 minutes old by default) was served"
+                    },
+                    "rank": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "total_finalized_points": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "current": {
+                      "type": "object"
+                    },
+                    "chapters": {
+                      "type": "array"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error (always a JSON object)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{40}$",
+                    "description": "Wallet address",
+                    "example": "0x46a83dc1a264bff133db887023d2884167094837"
+                  },
+                  "detail": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "address"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "string"
+          },
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "invalid_request",
+                  "invalid_json",
+                  "body_too_large",
+                  "method_not_allowed",
+                  "not_found",
+                  "farm_not_found",
+                  "epoch_out_of_range",
+                  "upstream_rejected",
+                  "upstream_unavailable",
+                  "internal_error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
