@@ -18,13 +18,14 @@
       "kind": "openapi",
       "api": "meme-watch-api",
       "url": "https://agentdata.network/meme-watch/openapi/v1/openapi.json",
-      "notes": "The same document is served by the backend at GET /v1/openapi.json. Add sha256 once the URL is frozen."
+      "sha256": "da94cabc4359afb352c21e12391ca5339afac81a3f16c71c005afc29431afc65",
+      "notes": "The same document is served by the backend at GET /v1/openapi.json."
     }
   ],
   "access": "public",
   "results": "variable",
   "serving": {
-    "backend": "The meme-watch container (Node 22, no runtime dependencies; built from services/meme-watch/backend) behind the HA RelayMiner. It polls DexPaprika every 120 seconds under a hard monthly credit governor and holds the window in memory, mirrored to a CSV on a small persistent volume, so every relay is served from cache and never waits on an upstream call. Each supplier must set its own key in MW_DEXPAPRIKA_API_KEY; without one it falls back to the keyless tier and the feed thins. Light on CPU and memory.",
+    "backend": "The meme-watch container (Node 22, no runtime dependencies; built from github.com/TheFeloniousMonk/portal-services, meme-watch/backend) behind the HA RelayMiner. It polls DexPaprika every 120 seconds under a hard monthly credit governor and holds the window in memory, mirrored to a CSV on a small persistent volume, so every relay is served from cache and never waits on an upstream call. Each supplier must set its own key in MW_DEXPAPRIKA_API_KEY; without one it falls back to the keyless tier and the feed thins. Light on CPU and memory.",
     "implementations": [
       "meme-watch >= 1.0"
     ],
@@ -54,5 +55,5 @@
     "notes": "Every request is a POST JSON body to /v1/launches, answered from memory in milliseconds. The response carries as_of and complete_before so a consumer can tell a quiet minute from one still being indexed upstream, and pending_identity for launches discovered but not yet named. Gateway operators: type passthrough, rpc_types [\"rest\"], relay_timeout at least 10s; see sage-service.yaml in the service repository."
   },
   "docs": "https://agentdata.network/meme-watch/",
-  "updated": "2026-09-20"
+  "updated": "2026-10-15"
 }

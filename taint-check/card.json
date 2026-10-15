@@ -18,13 +18,14 @@
       "kind": "openapi",
       "api": "taint-check-api",
       "url": "https://agentdata.network/taint-check/openapi/v1/openapi.json",
-      "notes": "The same document is served by the backend at GET /v1/openapi.json. Add sha256 once the URL is frozen."
+      "sha256": "c65532220b1fe57f9a8d34ad287b40e68770cbc2289ff677219924e70183ba82",
+      "notes": "The same document is served by the backend at GET /v1/openapi.json."
     }
   ],
   "access": "public",
   "results": "variable",
   "serving": {
-    "backend": "The taint-check container (Node 22, no third-party dependencies; built from services/taint-check/backend) behind the HA RelayMiner with the rest backend pointed at it. No auth toward the backend; callers cannot send headers. On a schedule it mirrors the OSV.dev per-ecosystem all.zip archives (gs://osv-vulnerabilities, which already include the OpenSSF Malicious Packages MAL- records), builds an in-memory index, and mirrors it to a JSON snapshot on disk that is reloaded on restart; scans are served from that index, with the OSV querybatch API as an optional live backstop. Needs outbound access to storage.googleapis.com for the mirror sync, to the allowed code hosts for lockfile.url, and to the ecosystem registries for optional heuristics. CPU is light; RAM is dominated by the index, which is rebuilt off to the side during a sync. Tunable with TC_* environment variables.",
+    "backend": "The taint-check container (Node 22, no third-party dependencies; built from github.com/TheFeloniousMonk/portal-services, taint-check/backend) behind the HA RelayMiner with the rest backend pointed at it. No auth toward the backend; callers cannot send headers. On a schedule it mirrors the OSV.dev per-ecosystem all.zip archives (gs://osv-vulnerabilities, which already include the OpenSSF Malicious Packages MAL- records), builds an in-memory index, and mirrors it to a JSON snapshot on disk that is reloaded on restart; scans are served from that index, with the OSV querybatch API as an optional live backstop. Needs outbound access to storage.googleapis.com for the mirror sync, to the allowed code hosts for lockfile.url, and to the ecosystem registries for optional heuristics. CPU is light; RAM is dominated by the index, which is rebuilt off to the side during a sync. Tunable with TC_* environment variables.",
     "implementations": [
       "taint-check >= 1.1"
     ],
@@ -58,5 +59,5 @@
     "notes": "Every request is a POST JSON body to /v1/scan; scans finish in under a second, and fetching a lockfile.url adds up to 8 s. No rate limits to disable. Gateway operators: configure as type passthrough with rpc_types [\"rest\"] and a relay_timeout of at least 15s; see sage-service.yaml in the service repository."
   },
   "docs": "https://agentdata.network/taint-check/",
-  "updated": "2026-10-14"
+  "updated": "2026-10-15"
 }

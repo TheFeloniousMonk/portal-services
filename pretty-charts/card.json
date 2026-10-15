@@ -18,13 +18,14 @@
       "kind": "openapi",
       "api": "pretty-charts-api",
       "url": "https://agentdata.network/pretty-charts/openapi/v1/openapi.json",
-      "notes": "The same document is served by the backend at GET /v1/openapi.json. Add sha256 once the URL is frozen."
+      "sha256": "c924152346b8a83d175dc9660f0d12132e156c1f588c755a4886773a65273ebd",
+      "notes": "The same document is served by the backend at GET /v1/openapi.json."
     }
   ],
   "access": "public",
   "results": "deterministic",
   "serving": {
-    "backend": "The pretty-charts container (Node 22, Vega 6, Vega-Lite 6; built from services/pretty-charts/backend) behind the HA RelayMiner with the rest backend pointed at it. No auth toward the backend; callers cannot send headers. CPU-bound; about 150 MB RAM per render worker (PC_WORKERS, default 2). Caps are PC_* environment variables.",
+    "backend": "The pretty-charts container (Node 22, Vega 6, Vega-Lite 6; built from github.com/TheFeloniousMonk/portal-services, pretty-charts/backend) behind the HA RelayMiner with the rest backend pointed at it. No auth toward the backend; callers cannot send headers. CPU-bound; about 150 MB RAM per render worker (PC_WORKERS, default 2). Caps are PC_* environment variables.",
     "implementations": [
       "pretty-charts >= 1.0"
     ],
@@ -58,5 +59,5 @@
     "notes": "Every request is a POST JSON body to /v1/chart; typical renders finish in well under a second. No rate limits to disable. Gateway operators: configure as type passthrough with rpc_types [\"rest\"] and a relay_timeout of at least 15s; see sage-service.yaml in the service repository."
   },
   "docs": "https://agentdata.network/pretty-charts/",
-  "updated": "2026-09-13"
+  "updated": "2026-10-15"
 }
