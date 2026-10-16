@@ -11,7 +11,7 @@
 
 import { readFile, writeFile, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { config } from "./config.js";
+import { config, PRO_HOST, PUBLIC_HOST } from "./config.js";
 
 // Upstream conditions, as a closed vocabulary. SAGE scans the first 2 KB of a
 // success body for substrings like "timeout" or "service unavailable" and
@@ -25,6 +25,11 @@ export const NOTE = Object.freeze({
   UNREACHABLE: "unreachable",
   BAD_RESPONSE: "bad_response",
   HTTP_ERROR: "http_error",
+  // The key or its header was refused: a 401, or api-pro's edge answering a
+  // request without an Authorization header with an HTML block page.
+  AUTH_REJECTED: "auth_rejected",
+  // A free key sent to api-pro. The client moves itself to the public host.
+  WRONG_HOST: "wrong_host",
 });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -79,11 +84,25 @@ export class CreditLedger {
 }
 
 export class DexPaprika {
-  constructor(ledger) {
+  // `options` overrides the configured key, header and host; tests use it.
+  constructor(ledger, options = {}) {
     this.ledger = ledger;
+    this.apiKey = options.apiKey ?? config.apiKey;
+    this.authHeader = options.authHeader ?? config.authHeader;
+    this.baseUrl = options.baseUrl ?? config.baseUrl;
+    this.callSpacingMs = options.callSpacingMs ?? config.callSpacingMs;
     this.lastCallAt = 0;
     this.plan = "unknown";
     this.pausedUntil = 0;
+    this.authProblem = null;
+    this.logged = new Set();
+  }
+
+  // Each upstream configuration problem is logged once per process, not per call.
+  logOnce(key, payload) {
+    if (this.logged.has(key)) return;
+    this.logged.add(key);
+    console.error(JSON.stringify(payload));
   }
 
   get paused() {
@@ -96,15 +115,15 @@ export class DexPaprika {
     if (this.ledger.remaining <= 0) return { ok: false, data: null, note: NOTE.BUDGET_EXHAUSTED };
 
     const gap = Date.now() - this.lastCallAt;
-    if (gap < config.callSpacingMs) await sleep(config.callSpacingMs - gap);
+    if (gap < this.callSpacingMs) await sleep(this.callSpacingMs - gap);
 
-    const url = new URL(path, config.baseUrl);
+    const url = new URL(path, this.baseUrl);
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
     }
 
     const headers = { Accept: "application/json", "User-Agent": `${config.service}/${config.version}` };
-    if (config.hasKey) headers[config.authHeader] = config.apiKey;
+    if (this.apiKey) headers[this.authHeader] = this.apiKey;
 
     this.lastCallAt = Date.now();
     this.ledger.spend(1);
@@ -129,6 +148,7 @@ export class DexPaprika {
       this.pausedUntil = Date.now() + 6 * 60 * 60 * 1000;
       return { ok: false, data: null, note: NOTE.QUOTA_EXHAUSTED };
     }
+    if (res.status === 401 || res.status === 403) return this.refused(res);
     if (!res.ok) return { ok: false, data: null, note: NOTE.HTTP_ERROR };
 
     let data;
@@ -138,6 +158,40 @@ export class DexPaprika {
       return { ok: false, data: null, note: NOTE.BAD_RESPONSE };
     }
     return { ok: true, data, note: NOTE.OK };
+  }
+
+  // A 401 or 403, read the way DexPaprika documents them. Only the error code
+  // is kept, never upstream text, which could carry words gateways penalise.
+  async refused(res) {
+    let body = null;
+    if (/json/i.test(res.headers.get("content-type") || "")) {
+      try {
+        body = await res.json();
+      } catch {
+        // fall through as an unreadable refusal
+      }
+    }
+    if (res.status === 403 && body && body.error === "wrong_host") {
+      if (this.baseUrl === PRO_HOST) {
+        this.baseUrl = PUBLIC_HOST;
+        this.logOnce("wrong_host", {
+          msg: "the key is not a paid-plan key; api-pro refused it, so this process now uses the public host. Set MW_DEXPAPRIKA_PLAN=free (or remove MW_DEXPAPRIKA_BASE_URL) to start there.",
+          host: PUBLIC_HOST,
+        });
+      }
+      this.authProblem = NOTE.WRONG_HOST;
+      return { ok: false, data: null, note: NOTE.WRONG_HOST };
+    }
+    this.authProblem = NOTE.AUTH_REJECTED;
+    this.logOnce(`auth_${res.status}`, {
+      msg: "DexPaprika refused the request. It needs the key as the whole Authorization header value; an HTML 403 is api-pro's edge rejecting a request without one.",
+      status: res.status,
+      host: new URL(this.baseUrl).host,
+      auth_header: this.authHeader,
+      key_sent: Boolean(this.apiKey),
+      upstream_code: body && (body.error || null),
+    });
+    return { ok: false, data: null, note: NOTE.AUTH_REJECTED };
   }
 
   // The API echoes the filters it applied. Anything we sent that is missing was

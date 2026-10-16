@@ -16,20 +16,38 @@ const str = (v, d) => (v === undefined || v === "" ? d : String(v));
 const apiKey = str(process.env.MW_DEXPAPRIKA_API_KEY, "");
 const hasKey = apiKey.length > 0;
 
+export const PUBLIC_HOST = "https://api.dexpaprika.com";
+export const PRO_HOST = "https://api-pro.dexpaprika.com";
+
+// Which DexPaprika plan the key belongs to, because the plan decides the host
+// (docs.dexpaprika.com/api-pro/introduction):
+//   keyless  no key: the public host, 10,000 credits per 30 days per IP.
+//   free     a free key: still the public host, where the key raises the
+//            allowance to 100,000 credits. api-pro refuses a free key with a
+//            403 `wrong_host`.
+//   paid     Dev, Pro or Enterprise: api-pro. Set MW_MONTHLY_CREDITS to the
+//            plan's allowance; the default stays at the free-key ceiling.
+const planSetting = str(process.env.MW_DEXPAPRIKA_PLAN, "free").toLowerCase();
+const plan = !hasKey ? "keyless" : planSetting === "paid" ? "paid" : "free";
+
 export const config = Object.freeze({
   service: "meme-watch",
-  version: "1.0.0",
+  version: "1.0.1",
   port: num(process.env.PORT, 8080),
 
   // --- upstream ---------------------------------------------------------
   apiKey,
   hasKey,
-  // The spec documents an authenticated host but not the header name. Both are
-  // configurable, and /v1/capabilities reports the plan the API says it applied
-  // (its X-Api-Plan response header) so a wrong header shows up on first run
-  // instead of silently degrading to the keyless tier.
-  baseUrl: str(process.env.MW_DEXPAPRIKA_BASE_URL, hasKey ? "https://api-pro.dexpaprika.com" : "https://api.dexpaprika.com"),
-  authHeader: str(process.env.MW_DEXPAPRIKA_AUTH_HEADER, "X-Api-Key"),
+  plan,
+  // Set but not one of the known values; reported at startup.
+  planSettingUnknown: hasKey && !["free", "paid"].includes(planSetting) ? planSetting : null,
+  baseUrl: str(process.env.MW_DEXPAPRIKA_BASE_URL, plan === "paid" ? PRO_HOST : PUBLIC_HOST),
+  // DexPaprika takes the key as the whole Authorization header value, with no
+  // scheme word. 1.0.0 sent X-Api-Key, which both hosts ignore: api-pro answered
+  // with a Cloudflare block page and the public host served the keyless tier.
+  // /v1/capabilities reports the plan the API says it applied (its X-Api-Plan
+  // response header), so a header problem shows up there on first run.
+  authHeader: str(process.env.MW_DEXPAPRIKA_AUTH_HEADER, "Authorization"),
   chain: str(process.env.MW_CHAIN, "solana"),
   fetchDeadlineMs: num(process.env.MW_FETCH_DEADLINE_MS, 10000),
   callSpacingMs: num(process.env.MW_CALL_SPACING_MS, 300),
@@ -45,8 +63,9 @@ export const config = Object.freeze({
   // --- budget governor --------------------------------------------------
   maxCallsPerPoll: num(process.env.MW_MAX_CALLS_PER_POLL, 4),
   maxListPages: num(process.env.MW_MAX_LIST_PAGES, 2),
-  // 5% under the published allowance so a miscount never spends into an overage.
-  monthlyCredits: num(process.env.MW_MONTHLY_CREDITS, hasKey ? 95000 : 28000),
+  // 5% under the published allowance so a miscount never spends into an overage:
+  // 100,000 with a key, 10,000 per 30 days per IP without one.
+  monthlyCredits: num(process.env.MW_MONTHLY_CREDITS, hasKey ? 95000 : 9500),
 
   // A cold start finds a full hour of launches at once and can only name a few
   // per poll, so the window would take hours to fill on the steady-state rate.

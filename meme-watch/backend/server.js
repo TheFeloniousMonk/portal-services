@@ -254,8 +254,13 @@ const server = http.createServer(async (req, res) => {
         columns: COLUMNS,
         upstream: {
           // Reported by the API itself. If a key is configured and this still
-          // says keyless, the auth header name is wrong.
+          // says keyless, the key is not reaching it: check auth_header.
           plan: client.plan,
+          configured_plan: config.plan,
+          host: new URL(client.baseUrl).host,
+          auth_header: config.authHeader,
+          // auth_rejected or wrong_host once DexPaprika has refused the key.
+          auth_problem: client.authProblem,
           keyed: config.hasKey,
           monthly_credit_budget: config.monthlyCredits,
           credits_remaining: ledger.remaining,
@@ -325,6 +330,14 @@ async function main() {
       })
     );
   }
+  if (config.planSettingUnknown) {
+    console.error(
+      JSON.stringify({
+        msg: "MW_DEXPAPRIKA_PLAN is not free or paid; treating the key as free",
+        value: config.planSettingUnknown,
+      })
+    );
+  }
   poller.start();
   server.listen(config.port, () => {
     console.log(
@@ -336,6 +349,9 @@ async function main() {
         window_minutes: config.windowMinutes,
         poll_interval_seconds: Math.round(config.pollIntervalMs / 1000),
         rows_restored: table.size,
+        upstream_plan: config.plan,
+        upstream_host: new URL(client.baseUrl).host,
+        auth_header: config.authHeader,
       })
     );
   });

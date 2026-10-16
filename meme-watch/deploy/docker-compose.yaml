@@ -14,16 +14,18 @@
 services:
   backend:
     build: ../backend
-    image: meme-watch-backend:1.0.0
+    image: meme-watch-backend:1.0.1
     container_name: meme-watch-backend
     restart: unless-stopped
     environment:
       # Per-supplier upstream credential. Compose reads .env from this directory.
       MW_DEXPAPRIKA_API_KEY: ${MW_DEXPAPRIKA_API_KEY:?set MW_DEXPAPRIKA_API_KEY in deploy/.env}
-      # api-pro.dexpaprika.com answers this host with a Cloudflare block page
-      # (403, every request since 2026-09-20). The public API serves both calls
-      # and the same filters; it ignores the key header (plan: keyless).
-      MW_DEXPAPRIKA_BASE_URL: "https://api.dexpaprika.com"
+      # The key's plan, which picks the host: "free" uses api.dexpaprika.com
+      # (100,000 credits a month with a key), "paid" uses api-pro.dexpaprika.com.
+      # A free key on api-pro is refused, and the backend falls back to the
+      # public host by itself. 1.0.0 sent the key in the wrong header, which is
+      # why api-pro answered with a Cloudflare block page from 2026-09-20.
+      MW_DEXPAPRIKA_PLAN: ${MW_DEXPAPRIKA_PLAN:-free}
       MW_WINDOW_MINUTES: "60"
       MW_POLL_INTERVAL_MS: "120000"
       # The credit governor. 4 calls per poll is about 86,400 a month, inside a

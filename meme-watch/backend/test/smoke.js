@@ -3,7 +3,7 @@
 //
 // Run with: npm test
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -183,6 +183,118 @@ test("a dropped filter is detected from the echoed query", () => {
   // volume_24h_min is the spelling the REST API silently ignores.
   const bad = { query: { created_after: 1, txns_24h_min: 1 } };
   assert.deepEqual(DexPaprika.assertFilters(bad, { volume_usd_24h_min: 1 }), ["volume_usd_24h_min"]);
+});
+
+// The config is read from the environment at import, so each case runs in its
+// own process. The key here is a dummy string, never a real one.
+function configWith(env) {
+  const code = 'import("./config.js").then(({config:c})=>console.log(JSON.stringify({plan:c.plan,baseUrl:c.baseUrl,authHeader:c.authHeader,monthlyCredits:c.monthlyCredits,unknown:c.planSettingUnknown})))';
+  const clean = { ...process.env };
+  for (const k of Object.keys(clean)) if (k.startsWith("MW_")) delete clean[k];
+  const out = spawnSync(process.execPath, ["-e", code], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+    env: { ...clean, ...env },
+    encoding: "utf8",
+  });
+  return JSON.parse(out.stdout.trim());
+}
+
+test("no key: public host, keyless budget under the 10,000-credit allowance", () => {
+  const c = configWith({});
+  assert.equal(c.plan, "keyless");
+  assert.equal(c.baseUrl, "https://api.dexpaprika.com");
+  assert.equal(c.monthlyCredits, 9500);
+});
+
+test("a key defaults to the free plan: public host, Authorization header", () => {
+  const c = configWith({ MW_DEXPAPRIKA_API_KEY: "api_dummy" });
+  assert.equal(c.plan, "free");
+  assert.equal(c.baseUrl, "https://api.dexpaprika.com");
+  assert.equal(c.authHeader, "Authorization");
+  assert.equal(c.monthlyCredits, 95000);
+});
+
+test("a paid key goes to api-pro", () => {
+  const c = configWith({ MW_DEXPAPRIKA_API_KEY: "api_dummy", MW_DEXPAPRIKA_PLAN: "PAID" });
+  assert.equal(c.plan, "paid");
+  assert.equal(c.baseUrl, "https://api-pro.dexpaprika.com");
+});
+
+test("an unknown plan value is treated as free and reported", () => {
+  const c = configWith({ MW_DEXPAPRIKA_API_KEY: "api_dummy", MW_DEXPAPRIKA_PLAN: "pro" });
+  assert.equal(c.plan, "free");
+  assert.equal(c.unknown, "pro");
+});
+
+test("an explicit base URL still wins", () => {
+  const c = configWith({ MW_DEXPAPRIKA_API_KEY: "api_dummy", MW_DEXPAPRIKA_BASE_URL: "https://example.test" });
+  assert.equal(c.baseUrl, "https://example.test");
+});
+
+// The client against a stubbed fetch, one documented DexPaprika answer each
+// (docs.dexpaprika.com/api-pro/introduction, "If your request just failed").
+const ledgerStub = () => ({ remaining: 100, spent: 0, spend(n = 1) { this.spent += n; } });
+async function withFetch(responder, fn) {
+  const real = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), headers: init.headers });
+    return responder(String(url), init);
+  };
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    await fn(calls);
+  } finally {
+    globalThis.fetch = real;
+    console.error = quiet;
+  }
+}
+const json = (status, body, headers = {}) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
+
+await testAsync("the key travels as the whole Authorization header value", async () => {
+  await withFetch(() => json(200, { ok: 1 }, { "x-api-plan": "free" }), async (calls) => {
+    const c = new DexPaprika(ledgerStub(), { apiKey: "api_dummy", authHeader: "Authorization", baseUrl: "https://api.dexpaprika.com", callSpacingMs: 0 });
+    const out = await c.get("/networks");
+    assert.equal(out.ok, true);
+    assert.equal(calls[0].headers.Authorization, "api_dummy");
+    assert.equal(calls[0].headers["X-Api-Key"], undefined);
+    assert.equal(c.plan, "free");
+  });
+});
+
+await testAsync("api-pro's HTML block page is reported as auth_rejected, not http_error", async () => {
+  await withFetch(
+    () => new Response("<!DOCTYPE html><title>Attention Required! | Cloudflare</title>", { status: 403, headers: { "content-type": "text/html" } }),
+    async () => {
+      const c = new DexPaprika(ledgerStub(), { apiKey: "api_dummy", authHeader: "X-Api-Key", baseUrl: "https://api-pro.dexpaprika.com", callSpacingMs: 0 });
+      const out = await c.get("/networks/solana/pools/search");
+      assert.equal(out.note, "auth_rejected");
+      assert.equal(c.authProblem, "auth_rejected");
+    }
+  );
+});
+
+await testAsync("an unrecognised key (401) is auth_rejected", async () => {
+  await withFetch(() => json(401, { message: "api key verification has failed" }), async () => {
+    const c = new DexPaprika(ledgerStub(), { apiKey: "api_wrong", authHeader: "Authorization", baseUrl: "https://api-pro.dexpaprika.com", callSpacingMs: 0 });
+    assert.equal((await c.get("/networks")).note, "auth_rejected");
+  });
+});
+
+await testAsync("a free key on api-pro moves the client to the public host", async () => {
+  await withFetch(
+    (url) => (url.startsWith("https://api-pro.") ? json(403, { error: "wrong_host" }) : json(200, { ok: 1 }, { "x-api-plan": "free" })),
+    async (calls) => {
+      const c = new DexPaprika(ledgerStub(), { apiKey: "api_dummy", authHeader: "Authorization", baseUrl: "https://api-pro.dexpaprika.com", callSpacingMs: 0 });
+      assert.equal((await c.get("/networks")).note, "wrong_host");
+      assert.equal(c.baseUrl, "https://api.dexpaprika.com");
+      const again = await c.get("/networks");
+      assert.equal(again.ok, true);
+      assert.ok(calls[1].url.startsWith("https://api.dexpaprika.com/"));
+    }
+  );
 });
 
 // ---------------------------------------------------------------------------

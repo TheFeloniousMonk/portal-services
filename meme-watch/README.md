@@ -24,9 +24,21 @@ metered per IP address and allows far fewer requests a month. The credit governo
 reacts by polling less often, so the feed thins out and launches age out of the
 window before they can be named. Treat a key as required.
 
-On first run, check `GET /v1/capabilities` and read `upstream.plan`. That value is
-what the API itself reports. If a key is configured and it still says the keyless
-tier, the auth header name is wrong for your account; set `MW_DEXPAPRIKA_AUTH_HEADER`.
+A free key goes to the public host, `api.dexpaprika.com`, where it raises the
+allowance from 10,000 credits per 30 days per IP to 100,000 a month. Only a paid key
+(Dev, Pro or Enterprise) belongs on `api-pro.dexpaprika.com`: set
+`MW_DEXPAPRIKA_PLAN=paid` for one, and raise `MW_MONTHLY_CREDITS` to its allowance.
+The key travels as the whole `Authorization` header value, with no scheme word.
+
+On first run, check `GET /v1/capabilities` and read `upstream`. `plan` is what the
+API itself reports; `host`, `auth_header` and `auth_problem` show what the backend
+sent and whether DexPaprika refused it. If a key is configured and `plan` still says
+keyless, the key is not reaching the API. A free key sent to api-pro is refused with
+`wrong_host`, and the backend moves itself to the public host.
+
+Before 1.0.1 the key went out as `X-Api-Key`, which DexPaprika ignores: api-pro
+answered every request with a Cloudflare "you have been blocked" page, and the
+public host served the keyless tier.
 
 ---
 
@@ -165,14 +177,15 @@ All settings are `MW_*` environment variables. Defaults are in `backend/config.j
 | Variable | Default | Purpose |
 |---|---|---|
 | `MW_DEXPAPRIKA_API_KEY` | none | **Per-supplier upstream key.** |
-| `MW_DEXPAPRIKA_BASE_URL` | auto | Authenticated host when a key is set. |
-| `MW_DEXPAPRIKA_AUTH_HEADER` | `X-Api-Key` | Change if your account uses another name. |
+| `MW_DEXPAPRIKA_PLAN` | `free` | `free` or `paid`; picks the host. Ignored without a key. |
+| `MW_DEXPAPRIKA_BASE_URL` | from the plan | `api.dexpaprika.com` for keyless and free, `api-pro.dexpaprika.com` for paid. |
+| `MW_DEXPAPRIKA_AUTH_HEADER` | `Authorization` | DexPaprika's documented header; there is no reason to change it. |
 | `MW_WINDOW_MINUTES` | `60` | Size of the rolling window. |
 | `MW_POLL_INTERVAL_MS` | `120000` | Poll cadence. |
 | `MW_INDEX_LAG_SECONDS` | `120` | Declared completeness boundary. |
 | `MW_MAX_CALLS_PER_POLL` | `4` | Hard per-poll upstream cap. |
 | `MW_MAX_LIST_PAGES` | `2` | Pages of the window to read per poll. |
-| `MW_MONTHLY_CREDITS` | `95000` | Persisted monthly ceiling. |
+| `MW_MONTHLY_CREDITS` | `95000` with a key, `9500` without | Persisted monthly ceiling, 5% under the allowance. |
 | `MW_COLDSTART_EXTRA_CALLS` | `60` | One-time allowance to fill the window at boot. |
 | `MW_GATE_MIN_VOLUME_USD` | `50000` | Upstream traction gate. |
 | `MW_GATE_MIN_TXNS` | `100` | Upstream traction gate. |
