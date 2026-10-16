@@ -14,7 +14,7 @@
 services:
   backend:
     build: ../backend
-    image: meme-watch-backend:1.0.1
+    image: meme-watch-backend:1.0.2
     container_name: meme-watch-backend
     restart: unless-stopped
     environment:

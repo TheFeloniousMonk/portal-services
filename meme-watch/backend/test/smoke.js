@@ -4,7 +4,7 @@
 // Run with: npm test
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ import {
   parseCsv,
   LaunchTable,
   COLUMNS,
+  guardSplit,
 } from "../store.js";
 import { DexPaprika } from "../dexpaprika.js";
 
@@ -119,6 +120,71 @@ test("enrichment takes identity, the buy and sell split, and the true reserve", 
   // The quote-side reserve, not the headline liquidity_usd of 2586.
   assert.equal(e.quote_reserve_usd, 27.736259038316255);
   assert.ok(e.twitter.startsWith("https://x.com/"));
+});
+
+// The real split DexPaprika reported for PumpSwap pool EVumYL4z... on
+// 2026-10-16: every trade booked as a sell while the price rose 48% in an hour.
+const ONE_SIDED = { volume_usd: 198065.87, buy_usd: 0, sell_usd: 198065.87, sells: 1275, buys: 0, txns: 1275 };
+
+test("a one-sided split over many trades is withheld and flagged", () => {
+  const e = enrichmentFrom({ ...POOL_DETAILS, "24h": ONE_SIDED });
+  assert.equal(e.split_unreliable, true);
+  assert.equal(e.buys, null);
+  assert.equal(e.sells, null);
+  assert.equal(e.buy_usd, null);
+  assert.equal(e.sell_usd, null);
+  // Identity is untouched.
+  assert.equal(e.symbol, "PEPE");
+});
+
+test("a normal split passes through and is marked reliable", () => {
+  const e = enrichmentFrom(POOL_DETAILS);
+  assert.equal(e.split_unreliable, false);
+  assert.equal(e.buys, 169);
+  assert.equal(e.sell_usd, 4441.87);
+});
+
+test("a one-sided split under the threshold is believable and kept", () => {
+  const few = { buys: 0, sells: 7, buy_usd: 0, sell_usd: 120, txns: 7 };
+  const e = enrichmentFrom({ ...POOL_DETAILS, "24h": few });
+  assert.equal(e.split_unreliable, false);
+  assert.equal(e.sells, 7);
+  // The threshold is configurable.
+  assert.equal(guardSplit(few, 5).split_unreliable, true);
+});
+
+test("a missing split is left alone, not flagged", () => {
+  const e = enrichmentFrom({ ...POOL_DETAILS, "24h": {} });
+  assert.equal(e.buys, null);
+  assert.equal(e.split_unreliable, false);
+});
+
+await testAsync("rows saved before the guard are cleaned when the csv is loaded", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "meme-watch-guard-"));
+  try {
+    // A CSV in the 1.0.1 layout: no split_unreliable column, a one-sided split.
+    const now = new Date().toISOString();
+    const old = [
+      "pool_address,dex_id,created_at,first_seen,buys,sells,buy_usd,sell_usd,txns",
+      `BAD1,pumpswap,${now},${now},0,1275,0,198065.87,1275`,
+      `GOOD1,pumpswap,${now},${now},169,177,5448.03,4441.87,346`,
+    ].join("\n");
+    await writeFile(join(dir, "launches.csv"), old, "utf8");
+    const table = new LaunchTable(dir, "launches.csv", 60);
+    await table.load();
+    const bad = table.rows.get("BAD1");
+    const good = table.rows.get("GOOD1");
+    assert.equal(bad.split_unreliable, true);
+    assert.equal(bad.sells, null);
+    assert.equal(good.split_unreliable, false);
+    assert.equal(good.buys, 169);
+    // And the flag survives the next save and load.
+    const back = parseCsv(toCsv([bad, good]));
+    assert.equal(back[0].split_unreliable, true);
+    assert.equal(back[1].split_unreliable, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("total supply is scaled out of base units so price times supply is the fdv", () => {

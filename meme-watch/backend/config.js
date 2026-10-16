@@ -32,7 +32,7 @@ const plan = !hasKey ? "keyless" : planSetting === "paid" ? "paid" : "free";
 
 export const config = Object.freeze({
   service: "meme-watch",
-  version: "1.0.1",
+  version: "1.0.2",
   port: num(process.env.PORT, 8080),
 
   // --- upstream ---------------------------------------------------------
@@ -89,6 +89,11 @@ export const config = Object.freeze({
   // config change; raising it narrows the feed to the strongest launches.
   gateMinTxns: num(process.env.MW_GATE_MIN_TXNS, 100),
   gateMinVolumeUsd: num(process.env.MW_GATE_MIN_VOLUME_USD, 50000),
+
+  // --- data quality ------------------------------------------------------
+  // A buy and sell split with zero on one side over this many trades is
+  // withheld as unreliable (see guardSplit in store.js).
+  splitMinTxns: num(process.env.MW_SPLIT_MIN_TXNS, 20),
 
   // --- store ------------------------------------------------------------
   dataDir: str(process.env.MW_DATA_DIR, "/data"),

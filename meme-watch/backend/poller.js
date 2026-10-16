@@ -144,7 +144,7 @@ export class Poller {
           note = res.note;
           break;
         }
-        const identity = enrichmentFrom(res.data);
+        const identity = enrichmentFrom(res.data, { splitMinTxns: config.splitMinTxns });
         if (identity) {
           this.table.insert(address, traction, identity);
           added++;

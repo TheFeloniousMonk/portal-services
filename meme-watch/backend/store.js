@@ -24,7 +24,7 @@ export const COLUMNS = Object.freeze([
   "pool_address", "dex_id", "created_at", "first_seen", "token_address",
   "name", "symbol", "decimals", "total_supply", "website", "twitter", "has_image",
   "price_usd", "fdv_usd", "liquidity_usd", "quote_reserve_usd",
-  "volume_usd", "txns", "buys", "sells", "buy_usd", "sell_usd",
+  "volume_usd", "txns", "buys", "sells", "buy_usd", "sell_usd", "split_unreliable",
   "vol_per_txn", "price_change_5m", "ath_usd", "ath_at", "drawdown_from_ath_pct",
   "updated_at",
 ]);
@@ -35,7 +35,25 @@ const NUMERIC_COLUMNS = new Set([
   "price_change_5m", "ath_usd", "drawdown_from_ath_pct",
 ]);
 
+const BOOLEAN_COLUMNS = new Set(["has_image", "split_unreliable"]);
+
 const DQUOTE = String.fromCharCode(34);
+
+// The buy and sell split is DexPaprika's, and on some PumpSwap pools it books
+// every trade as a sell (seen 2026-10-16: 23 of 34 PumpSwap pools in the window,
+// 1,275 sells and 0 buys while the price rose 48% in an hour). A real pool with
+// this many trades always has both sides, so a one-sided split above the
+// threshold is withheld: the four split fields become null and split_unreliable
+// says why, rather than telling an agent that nobody is buying.
+export const SPLIT_GUARD_MIN_TXNS = 20;
+
+export function guardSplit(fields, minTxns = SPLIT_GUARD_MIN_TXNS) {
+  const buys = numOrNull(fields.buys);
+  const sells = numOrNull(fields.sells);
+  const oneSided = buys !== null && sells !== null && (buys === 0 || sells === 0) && buys + sells >= minTxns;
+  if (!oneSided) return { ...fields, split_unreliable: false };
+  return { ...fields, buys: null, sells: null, buy_usd: null, sell_usd: null, split_unreliable: true };
+}
 
 function numOrNull(v) {
   if (v === null || v === undefined || v === "") return null;
@@ -78,7 +96,7 @@ export function tractionFrom(listRow) {
 
 // Identity plus the figures only the detail call carries: the buy and sell
 // split, the true quote-side reserve, and the all-time high.
-export function enrichmentFrom(details) {
+export function enrichmentFrom(details, { splitMinTxns = SPLIT_GUARD_MIN_TXNS } = {}) {
   if (!details) return null;
   const tokens = Array.isArray(details.tokens) ? details.tokens : [];
   const memeId =
@@ -100,7 +118,7 @@ export function enrichmentFrom(details) {
   const supply =
     rawSupply !== null && decimals !== null && decimals >= 0 ? rawSupply / 10 ** decimals : rawSupply;
 
-  return {
+  return guardSplit({
     token_address: memeId || "",
     name: meme.name || "",
     symbol: meme.symbol || "",
@@ -121,7 +139,7 @@ export function enrichmentFrom(details) {
     ath_at: (details.price_stats && details.price_stats.ath_date) || "",
     drawdown_from_ath_pct:
       ath && price !== null && ath > 0 ? round(((price - ath) / ath) * 100, 4) : null,
-  };
+  }, splitMinTxns);
 }
 
 function csvCell(value) {
@@ -196,7 +214,7 @@ export function parseCsv(text) {
     const row = {};
     header.forEach((h, j) => {
       const raw = cells[j] === undefined ? "" : cells[j];
-      if (h === "has_image") row[h] = raw === "true";
+      if (BOOLEAN_COLUMNS.has(h)) row[h] = raw === "true";
       else if (NUMERIC_COLUMNS.has(h)) row[h] = raw === "" ? null : Number(raw);
       else row[h] = raw;
     });
@@ -206,10 +224,11 @@ export function parseCsv(text) {
 }
 
 export class LaunchTable {
-  constructor(dir, csvName, windowMinutes) {
+  constructor(dir, csvName, windowMinutes, { splitMinTxns = SPLIT_GUARD_MIN_TXNS } = {}) {
     this.dir = dir;
     this.path = join(dir, csvName);
     this.windowMinutes = windowMinutes;
+    this.splitMinTxns = splitMinTxns;
     this.rows = new Map();
   }
 
@@ -217,7 +236,9 @@ export class LaunchTable {
     try {
       const text = await readFile(this.path, "utf8");
       for (const row of parseCsv(text)) {
-        if (row.pool_address) this.rows.set(row.pool_address, row);
+        // Rows saved before the split guard existed get it applied here, since
+        // the split is identity and is never refetched.
+        if (row.pool_address) this.rows.set(row.pool_address, guardSplit(row, this.splitMinTxns));
       }
       this.prune();
     } catch {

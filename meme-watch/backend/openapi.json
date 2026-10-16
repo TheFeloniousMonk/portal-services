@@ -198,10 +198,14 @@
             "description": "Since launch, for any pool younger than the window."
           },
           "txns": { "type": "integer" },
-          "buys": { "type": ["integer", "null"] },
-          "sells": { "type": ["integer", "null"] },
-          "buy_usd": { "type": ["number", "null"] },
-          "sell_usd": { "type": ["number", "null"] },
+          "buys": { "type": ["integer", "null"], "description": "Null when split_unreliable is true." },
+          "sells": { "type": ["integer", "null"], "description": "Null when split_unreliable is true." },
+          "buy_usd": { "type": ["number", "null"], "description": "Null when split_unreliable is true." },
+          "sell_usd": { "type": ["number", "null"], "description": "Null when split_unreliable is true." },
+          "split_unreliable": {
+            "type": "boolean",
+            "description": "True when the upstream buy and sell split was withheld because one side was zero over at least MW_SPLIT_MIN_TXNS trades (default 20), which no real pool shows. DexPaprika books every trade as a sell on some PumpSwap pools."
+          },
           "vol_per_txn": {
             "type": ["number", "null"],
             "description": "Volume divided by transaction count. A very low value indicates automated churn rather than organic interest."

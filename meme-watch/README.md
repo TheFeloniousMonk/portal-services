@@ -170,6 +170,17 @@ Pocket already supplies.
 
 ---
 
+## Data quality: the buy and sell split
+
+The split comes from DexPaprika, and on some PumpSwap pools it books every trade as
+a sell. On 2026-10-16, 23 of the 34 PumpSwap pools in the window showed only sells,
+one with 1,275 sells and 0 buys while its price rose 48% in an hour; every Meteora
+and Pump.fun pool had both sides. A pool with that many trades always has both, so
+when one side is zero over at least `MW_SPLIT_MIN_TXNS` trades, `buys`, `sells`,
+`buy_usd` and `sell_usd` are returned as null and `split_unreliable` is true. Volume,
+transaction count and price are unaffected. Rows saved before 1.0.2 are cleaned when
+the CSV is loaded.
+
 ## Configuration
 
 All settings are `MW_*` environment variables. Defaults are in `backend/config.js`.
@@ -189,6 +200,7 @@ All settings are `MW_*` environment variables. Defaults are in `backend/config.j
 | `MW_COLDSTART_EXTRA_CALLS` | `60` | One-time allowance to fill the window at boot. |
 | `MW_GATE_MIN_VOLUME_USD` | `50000` | Upstream traction gate. |
 | `MW_GATE_MIN_TXNS` | `100` | Upstream traction gate. |
+| `MW_SPLIT_MIN_TXNS` | `20` | A buy and sell split with zero on one side over this many trades is withheld as unreliable. |
 | `MW_DATA_DIR` | `/data` | CSV and credit ledger. Needs a persistent volume. |
 
 ---

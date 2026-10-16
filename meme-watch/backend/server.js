@@ -34,7 +34,9 @@ const SORTS = Object.freeze({
 
 const ledger = new CreditLedger(config.dataDir, config.monthlyCredits);
 const client = new DexPaprika(ledger);
-const table = new LaunchTable(config.dataDir, config.csvName, config.windowMinutes);
+const table = new LaunchTable(config.dataDir, config.csvName, config.windowMinutes, {
+  splitMinTxns: config.splitMinTxns,
+});
 const poller = new Poller(client, ledger, table);
 
 function sendJson(res, status, payload) {
