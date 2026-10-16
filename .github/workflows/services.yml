@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [infinifi, meme-watch, pretty-charts, taint-check]
+        service: [infinifi, meme-watch, pretty-charts, pump-check, taint-check]
     runs-on: ubuntu-latest
     permissions:
       contents: read

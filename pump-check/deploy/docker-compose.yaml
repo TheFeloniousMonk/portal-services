@@ -1,0 +1,44 @@
+# pump-check backend on a supplier host.
+#
+# One supplier serves every service it is staked for through one HA RelayMiner
+# stack per network. That stack (redis + miner + relayer + Caddy) owns the
+# network below. This file adds only the PumpCheck backend to that network;
+# each network's relayer reaches it as http://pump-check-backend:8080 once
+# relayer-service.yaml is merged into its relayer config (see
+# add-to-relayer.sh). Nothing here is exposed to the internet.
+#
+# The operator's settings (settings.json: the DexPaprika and Blockscout keys)
+# live in ../settings.env, beside backend/ and deploy/, so a redeploy never
+# replaces them. The Pocket Service Manager writes that file from its
+# Service settings form; without the app, see the README. The service runs
+# without either key, with less coverage.
+#
+# Needs outbound HTTPS to the RPC endpoints (Pocket first), api.dexpaprika.com
+# and api.blockscout.com. The SQLite store lives on the pump-check-data volume
+# and survives restarts and redeploys.
+#
+#   docker compose -p pump-check up -d --build
+
+services:
+  backend:
+    build: ../backend
+    image: pump-check-backend:1.0.0
+    container_name: pump-check-backend
+    restart: unless-stopped
+    env_file:
+      - path: ../settings.env
+        required: false
+    volumes:
+      - pump-check-data:/data
+    mem_limit: 512m
+    expose:
+      - "8080"
+    networks: [supplier]
+
+volumes:
+  pump-check-data:
+
+networks:
+  supplier:
+    external: true
+    name: pocket-supplier

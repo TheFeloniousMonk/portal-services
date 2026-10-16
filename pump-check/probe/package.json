@@ -1,0 +1,12 @@
+{
+  "name": "pump-check-probe",
+  "private": true,
+  "type": "module",
+  "description": "Builds the honeypot probe's runtime bytecode into backend/probe-artifact.json. Not part of the image.",
+  "scripts": {
+    "build": "node compile.mjs"
+  },
+  "devDependencies": {
+    "solc": "0.8.30"
+  }
+}

@@ -1,0 +1,191 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PumpCheck (Pocket Network service)",
+    "version": "1.0.0",
+    "description": "Memecoin risk checks for agents on Solana, Base and Robinhood Chain, served on Pocket Network as service `pump-check`. Every answer is a set of on-chain facts read at a named block or slot, each labeled `definitive` or `heuristic`, and `unknown` when a check could not run; unknown is never counted as a pass. The verdict is built only from checks that ran. EVM honeypot and tax results come from a simulated buy and sell inside an eth_call with state overrides: nothing is deployed, signed, or submitted. Not financial advice."
+  },
+  "servers": [{ "url": "/" }],
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "RelayMiner reachability ping",
+        "operationId": "get_root",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "service": { "type": "string" }, "status": { "type": "string" } } } } } } }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Readiness: ok once an ingest has completed in the last 10 minutes and at least one chain's RPC answers",
+        "operationId": "get_health",
+        "responses": {
+          "200": { "description": "Ready", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "const": "ok" }, "chains": { "type": "object", "additionalProperties": { "type": "boolean" } } } } } } },
+          "503": { "description": "Warming up", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "const": "warming" } } } } } }
+        }
+      }
+    },
+    "/v1/version": {
+      "get": {
+        "summary": "Identity probe",
+        "operationId": "get_version",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "service": { "const": "pump-check" }, "version": { "type": "string" }, "schema_version": { "type": "string" } } } } } } }
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "summary": "Chains, checks per chain, thresholds, limits, and the state of ingest, credits and RPC endpoints",
+        "operationId": "get_capabilities",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } } }
+      }
+    },
+    "/v1/openapi.json": {
+      "get": {
+        "summary": "This document",
+        "operationId": "get_openapi",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object" } } } } }
+      }
+    },
+    "/v1/check": {
+      "post": {
+        "summary": "Check 1 to 10 tokens",
+        "description": "Answers from the service's store plus live reads: everything that can flip (authorities, owner, proxy admin) is re-read at the request's block or slot, and the EVM honeypot simulation is redone when the stored one is older than about two minutes. A token the store has never seen is checked on demand. One bad token never fails the batch.",
+        "operationId": "post_check",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CheckRequest" },
+              "example": { "tokens": [{ "chain": "solana", "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" }, { "chain": "base", "address": "0x4ef531e3dfbe63205e13b2b943630a53e6ac1c14" }], "detail": "standard" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "One result per token, in request order", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CheckResponse" } } } },
+          "400": { "description": "Malformed body, unknown chain, more than 10 tokens, or an address not valid for its chain", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "413": { "description": "Body too large", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "No ingest has ever completed and no chain's RPC answers", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/v1/recent": {
+      "post": {
+        "summary": "The newest checked tokens on a chain, from the store",
+        "description": "A screening feed answered from stored checks without live reads, so it costs nothing upstream. Use /v1/check for a live answer on a token before acting on it.",
+        "operationId": "post_recent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["chain"],
+                "properties": {
+                  "chain": { "$ref": "#/components/schemas/Chain" },
+                  "verdict": { "oneOf": [{ "$ref": "#/components/schemas/Verdict" }, { "type": "array", "items": { "$ref": "#/components/schemas/Verdict" } }] },
+                  "min_liquidity_usd": { "type": "number" },
+                  "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+                }
+              },
+              "example": { "chain": "base", "verdict": ["ok", "caution"], "min_liquidity_usd": 10000, "limit": 20 }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Newest first", "content": { "application/json": { "schema": { "type": "object", "properties": { "chain": { "$ref": "#/components/schemas/Chain" }, "results": { "type": "array", "items": { "$ref": "#/components/schemas/TokenResult" } } } } } } },
+          "400": { "description": "Bad input", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Chain": { "type": "string", "enum": ["solana", "base", "robinhood"] },
+      "Verdict": { "type": "string", "enum": ["ok", "caution", "danger", "unknown"], "description": "danger: a critical check failed. caution: no critical failure, at least one warning. ok: every critical check ran and passed, no warnings. unknown: a critical check could not run and nothing failed." },
+      "CheckRequest": {
+        "type": "object",
+        "required": ["tokens"],
+        "properties": {
+          "tokens": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "type": "object", "required": ["chain", "address"], "properties": { "chain": { "$ref": "#/components/schemas/Chain" }, "address": { "type": "string", "description": "Solana mint (base58) or EVM token contract (0x...)" } } } },
+          "detail": { "type": "string", "enum": ["standard", "full"], "default": "standard", "description": "full adds each check's evidence (probe amounts, venue, holders, early buyers) and the RPC endpoint that answered" }
+        }
+      },
+      "CheckResponse": {
+        "type": "object",
+        "properties": {
+          "service": { "const": "pump-check" },
+          "schema_version": { "type": "string" },
+          "disclaimer": { "type": "string" },
+          "results": { "type": "array", "items": { "$ref": "#/components/schemas/TokenResult" } },
+          "errors": { "type": "array" }
+        }
+      },
+      "TokenResult": {
+        "type": "object",
+        "properties": {
+          "chain": { "$ref": "#/components/schemas/Chain" },
+          "address": { "type": "string" },
+          "found": { "type": ["boolean", "null"], "description": "false: no mint account or no contract code at this address" },
+          "known_asset": { "type": "boolean", "description": "A stablecoin, major or issuer-controlled asset that legitimately keeps its authorities; verdict ok, checks still reported" },
+          "verdict": { "$ref": "#/components/schemas/Verdict" },
+          "flags": { "type": "array", "items": { "$ref": "#/components/schemas/Flag" } },
+          "token": {
+            "type": "object",
+            "properties": {
+              "name": { "type": ["string", "null"] },
+              "symbol": { "type": ["string", "null"] },
+              "decimals": { "type": ["integer", "null"] },
+              "supply": { "type": ["number", "null"], "description": "Whole tokens" },
+              "created_at": { "type": ["string", "null"] },
+              "launchpad": { "type": ["string", "null"], "description": "pumpfun, meteora_dbc, pons, clanker, zora, uniswap_launchpad, ..." },
+              "deployer": { "type": ["string", "null"] }
+            }
+          },
+          "market": {
+            "type": ["object", "null"],
+            "description": "From DexPaprika via the store. price_usd and fdv_usd are filled for actively traded tokens; liquidity, volume and trades are summed over the token's known pools.",
+            "properties": {
+              "price_usd": { "type": ["number", "null"] },
+              "liquidity_usd": { "type": ["number", "null"] },
+              "fdv_usd": { "type": ["number", "null"] },
+              "volume_usd_24h": { "type": ["number", "null"] },
+              "txns_24h": { "type": ["number", "null"] },
+              "pools": { "type": "array", "items": { "type": "object", "properties": { "address": { "type": "string" }, "dex": { "type": ["string", "null"] }, "quote": { "type": ["string", "null"] }, "liquidity_usd": { "type": ["number", "null"] } } } },
+              "source": { "type": "string" },
+              "fetched_at": { "type": "string" }
+            }
+          },
+          "checks": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/Check" }, "description": "Solana: mint_authority, freeze_authority, token2022_extensions, transfer_hook, metadata_mutable, launch_state, creator_holding, lp_status, liquidity, holder_concentration (not_available), snipers_bundles (not_available), age. Base and Robinhood Chain: is_contract, proxy, owner, privileged_functions, honeypot, buy_tax, sell_tax, launch_state, creator_holding, lp_status, liquidity, holder_concentration, deployer, snipers_bundles, age." }
+        }
+      },
+      "Check": {
+        "type": "object",
+        "properties": {
+          "result": { "type": "string", "enum": ["pass", "fail", "warn", "info", "unknown", "not_applicable", "not_available"] },
+          "value": { "description": "The fact read (an authority, a tax percentage, a share of supply)" },
+          "reason": { "type": ["string", "null"] },
+          "method": { "type": ["string", "null"], "enum": ["definitive", "heuristic", null] },
+          "source": { "type": ["string", "null"], "enum": ["live", "stored", null] },
+          "as_of": { "type": "object", "description": "{slot} for Solana reads, {block} for EVM reads, or the indexer and time" },
+          "computed_at": { "type": "string" }
+        }
+      },
+      "Flag": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "warning", "info"] },
+          "method": { "type": ["string", "null"] },
+          "reason": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "service": { "const": "pump-check" },
+          "schema_version": { "type": "string" },
+          "error": { "type": "object", "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "details": {} } }
+        }
+      }
+    }
+  }
+}

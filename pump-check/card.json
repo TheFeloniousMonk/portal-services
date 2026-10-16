@@ -1,0 +1,53 @@
+{
+  "schema": "pocket-service-card/v1",
+  "description": "PumpCheck: what can go wrong with a memecoin, as of now, on Solana, Base and Robinhood Chain. POST /v1/check with 1 to 10 tokens [{chain, address}]. Each check names its result (pass, fail, warn, unknown, not_available), method (definitive or heuristic), source (live or stored) and the block or slot read; unknown is never counted as a pass. Solana: mint and freeze authority, Token-2022 extensions and transfer hooks, metadata mutability, Pump.fun curve state, creator holding, LP burn. Base and Robinhood Chain: proxy and owner, privileged functions, a simulated buy and sell for honeypot and taxes (an eth_call with state overrides; nothing is deployed or signed), LP burn, holders and deployer, early-buyer share; Pons and Uniswap v2/v3/v4 on Robinhood Chain. One verdict (ok, caution, danger, unknown) from the checks that ran, with plain-language flags. POST /v1/recent is a screening feed from the store. Every response is a JSON object. Not financial advice.",
+  "rpc_types": [
+    {
+      "type": "REST",
+      "intent": "expected",
+      "backend_hint": "pump-check container on :8080; mount at /",
+      "notes": "POST /v1/check and /v1/recent with a JSON body, plus GET /v1/version, /healthz, /v1/capabilities, /v1/openapi.json. Every response is a JSON object, including errors (which carry an 'error' field); token names are escaped against gateway phrases."
+    }
+  ],
+  "apis": ["pump-check-api"],
+  "specs": [
+    {
+      "kind": "openapi",
+      "api": "pump-check-api",
+      "url": "https://agentdata.network/pump-check/openapi/v1/openapi.json",
+      "notes": "The same document is served by the backend at GET /v1/openapi.json."
+    }
+  ],
+  "access": "public",
+  "results": "variable",
+  "serving": {
+    "backend": "The pump-check container (Node 22, SQLite store on a volume; built from github.com/TheFeloniousMonk/portal-services, pump-check/backend) behind the HA RelayMiner. It ingests new pools from DexPaprika every 2 minutes on a rolling 30-day credit ledger, precomputes each token through Pocket's public RPC (failing over to two public endpoints per chain only for request-time reads), and answers checks from the store plus live re-reads. Each supplier sets its own free DexPaprika key and Blockscout PRO API key in the app's Service settings; without them it serves with less coverage. Outbound HTTPS to the RPC endpoints, api.dexpaprika.com and api.blockscout.com.",
+    "implementations": ["pump-check >= 1.0"],
+    "docs": "https://agentdata.network/pump-check/operators",
+    "min_disk_gb": 2,
+    "min_ram_gb": 1,
+    "healthcheck": [
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/v1/version", "method": "GET" },
+        "expect": { "json_path": "$.service", "matches": "^pump-check$" },
+        "notes": "Identity probe: pins the backend to this service."
+      },
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/healthz", "method": "GET" },
+        "expect": { "json_path": "$.status", "matches": "^ok$" },
+        "notes": "Readiness: an ingest completed in the last 10 minutes and at least one chain's RPC answers."
+      },
+      {
+        "rpc_type": "REST",
+        "request": { "path": "/v1/check", "method": "POST", "body": { "tokens": [{ "chain": "solana", "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" }] } },
+        "expect": { "json_path": "$.results[0].checks.freeze_authority.value", "matches": "^7dGbd2QZcCKcTndnHcTL8q7SMVXAkp688NTQYwrRCrar$" },
+        "notes": "Functional probe: USDC's freeze authority, read live through Solana RPC. Stable, and proves a real chain read."
+      }
+    ],
+    "notes": "A check of 10 tokens answers within about 11 s. Gateway operators: type passthrough, rpc_types [\"rest\"], relay_timeout at least 15s; see sage-service.yaml in the service repository."
+  },
+  "docs": "https://agentdata.network/pump-check/",
+  "updated": "2026-10-16"
+}

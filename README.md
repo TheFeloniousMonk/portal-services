@@ -11,6 +11,7 @@ Independent REST services for [Pocket Network](https://pocket.network) (Shannon)
 | [`infinifi/`](infinifi/) | `infinifi` | Read-only infiniFi protocol and wallet data for agents | `ghcr.io/thefeloniousmonk/infinifi` |
 | [`meme-watch/`](meme-watch/) | `meme-watch` | Rolling 60-minute feed of Solana memecoin launches (DexPaprika) | `ghcr.io/thefeloniousmonk/meme-watch` |
 | [`pretty-charts/`](pretty-charts/) | `pretty-charts` | Inline data plus a chart spec in, SVG or an HTML document out (Vega-Lite) | `ghcr.io/thefeloniousmonk/pretty-charts` |
+| [`pump-check/`](pump-check/) | `pump-check` | Memecoin risk checks on Solana, Base and Robinhood Chain: on-chain facts at a named block, a simulated buy and sell, one verdict | `ghcr.io/thefeloniousmonk/pump-check` |
 | [`taint-check/`](taint-check/) | `taint-check` | Dependency manifest in, known-vulnerable and confirmed-malicious packages out (OSV.dev) | `ghcr.io/thefeloniousmonk/taint-check` |
 
 Meadow, the agent messaging node, is also mine but lives in its own repository: [TheFeloniousMonk/meadow-node](https://github.com/TheFeloniousMonk/meadow-node).

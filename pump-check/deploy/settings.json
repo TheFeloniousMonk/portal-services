@@ -1,0 +1,31 @@
+{
+  "settings": [
+    {
+      "env": "PUMP_DEXPAPRIKA_API_KEY",
+      "label": "DexPaprika API key",
+      "help": "Your own free key from dexpaprika.com. Without one the service runs on the keyless tier (10,000 credits per 30 days per IP) and ingests far fewer new tokens.",
+      "type": "text",
+      "secret": true,
+      "max_length": 256
+    },
+    {
+      "env": "PUMP_DEXPAPRIKA_PLAN",
+      "label": "DexPaprika plan",
+      "help": "Free keys use api.dexpaprika.com; paid keys use api-pro.",
+      "type": "choice",
+      "choices": [
+        { "value": "free", "label": "Free key" },
+        { "value": "paid", "label": "Paid plan (Dev, Pro or Enterprise)" }
+      ],
+      "default": "free"
+    },
+    {
+      "env": "PUMP_BLOCKSCOUT_API_KEY",
+      "label": "Blockscout PRO API key",
+      "help": "Your own free key from blockscout.com (PRO API). It adds holder concentration and the deployer on Base and Robinhood Chain; without it those two checks read not_available.",
+      "type": "text",
+      "secret": true,
+      "max_length": 256
+    }
+  ]
+}

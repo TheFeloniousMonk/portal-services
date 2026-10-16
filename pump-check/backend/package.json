@@ -1,0 +1,20 @@
+{
+  "name": "pump-check",
+  "version": "1.0.0",
+  "description": "Memecoin risk checks for agents on Solana, Base and Robinhood Chain, served as a REST service on Pocket Network: on-chain facts read at a named block, each labeled definitive or heuristic, with a verdict built only from checks that ran.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/unit.test.js test/http.test.js"
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0"
+  }
+}
