@@ -52,8 +52,8 @@
         "notes": "Functional probe: exercises the query path and asserts the declared window. Structural rather than data-dependent, because the feed changes every poll."
       }
     ],
-    "notes": "Every request is a POST JSON body to /v1/launches, answered from memory in milliseconds. The response carries as_of and complete_before so a consumer can tell a quiet minute from one still being indexed upstream, and pending_identity for launches discovered but not yet named. Gateway operators: type passthrough, rpc_types [\"rest\"], relay_timeout at least 10s; see sage-service.yaml in the service repository."
+    "notes": "Every request is a POST JSON body to /v1/launches, answered from memory in milliseconds. The response carries as_of and complete_before so a consumer can tell a quiet minute from one still being indexed upstream, and pending_identity for launches discovered but not yet named. SAGE operators: type generic (its name for passthrough), rpc_types [\"rest\"], relay_timeout at least 10s; see sage-service.yaml in the service repository."
   },
   "docs": "https://agentdata.network/meme-watch/",
-  "updated": "2026-10-15"
+  "updated": "2026-10-17"
 }

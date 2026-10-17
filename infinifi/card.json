@@ -50,8 +50,8 @@
         "notes": "Functional probe: the staked token is always siUSD, so the check is stable while the APYs change. Served from the shared 60 s cache."
       }
     ],
-    "notes": "Answers in well under a second when cached and within the 8 s upstream deadline otherwise. No rate limits to disable. Gateway operators: configure as type passthrough with rpc_types [\"rest\"] and a relay_timeout of at least 15s; see sage-service.yaml in the service repository."
+    "notes": "Answers in well under a second when cached and within the 8 s upstream deadline otherwise. No rate limits to disable. SAGE operators: type generic (its name for passthrough), rpc_types [\"rest\"], relay_timeout at least 15s; see sage-service.yaml in the service repository."
   },
   "docs": "https://agentdata.network/infinifi/",
-  "updated": "2026-10-15"
+  "updated": "2026-10-17"
 }
