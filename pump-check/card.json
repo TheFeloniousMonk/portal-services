@@ -15,6 +15,7 @@
       "kind": "openapi",
       "api": "pump-check-api",
       "url": "https://agentdata.network/pump-check/openapi/v1/openapi.json",
+      "sha256": "cf23b5124d7f437e170ce859d9e5139902f4b728a71944b8393a315932e47552",
       "notes": "The same document is served by the backend at GET /v1/openapi.json."
     }
   ],
@@ -49,5 +50,5 @@
     "notes": "A check of 10 tokens answers within about 11 s. Gateway operators: type passthrough, rpc_types [\"rest\"], relay_timeout at least 15s; see sage-service.yaml in the service repository."
   },
   "docs": "https://agentdata.network/pump-check/",
-  "updated": "2026-10-16"
+  "updated": "2026-10-17"
 }
