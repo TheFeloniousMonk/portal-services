@@ -177,6 +177,22 @@ export class HolderIndex {
     this.store.applyBalances(chain, deltas, { cursor, token, indexedTo, transfers: logs.length });
   }
 
+  // A peer's verified snapshot of a backfilling token at `block`. Taken only
+  // between ticks (a tick holds the chain while it awaits reads, and a page
+  // applied after the snapshot would count twice), only ahead of where the
+  // backfill is, and never past the follower's cursor. Returns why not, or null.
+  adopt(chain, token, block, holders) {
+    if (this.busy.has(chain)) return "busy";
+    const st = this.store.indexState(chain, token);
+    if (!st || st.status !== "backfill") return "not_backfilling";
+    if (block <= st.indexed_to) return "behind";
+    const cursor = this.store.indexCursor(chain);
+    if (cursor === null || block > cursor) return "ahead_of_cursor";
+    this.store.adoptSnapshot(chain, token, block, holders);
+    this.stats[chain].adopted = (this.stats[chain].adopted || 0) + 1;
+    return null;
+  }
+
   // Enrolls a token once its creation block is known.
   enroll(chain, token, creationBlock) {
     if (!this.indexes(chain)) return;

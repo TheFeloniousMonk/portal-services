@@ -155,6 +155,14 @@ export class Store {
       getMeta: this.db.prepare("SELECT value FROM meta WHERE key = ?"),
       setMeta: this.db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value"),
       inactive: this.db.prepare("SELECT chain, address FROM tokens WHERE last_active < ?"),
+      // Peer feeds: ordered by time, then chain and address, so a cursor resumes exactly.
+      peerTokens: this.db.prepare(
+        "SELECT chain, address, first_seen FROM tokens WHERE precomputed_at IS NOT NULL AND (first_seen > ? OR (first_seen = ? AND chain || ':' || address > ?)) ORDER BY first_seen, chain, address LIMIT ?"
+      ),
+      peerCreations: this.db.prepare(
+        "SELECT chain, token, result, computed_at FROM checks WHERE id = '_creation' AND (computed_at > ? OR (computed_at = ? AND chain || ':' || token > ?)) ORDER BY computed_at, chain, token LIMIT ?"
+      ),
+      reEnrich: this.db.prepare("UPDATE tokens SET enriched_at = NULL, requested_at = NULL WHERE chain = ? AND address = ?"),
     };
   }
 
@@ -371,6 +379,59 @@ export class Store {
 
   indexCounts(chain) {
     return Object.fromEntries(this.q.indexCounts.all(chain).map((r) => [r.status, r.n]));
+  }
+
+  // ---- peer sync ----
+
+  // This node's Ed25519 seed, made on first use and kept with the data.
+  nodeSeed(make) {
+    let seed = this.meta("node_key_seed");
+    if (!seed) {
+      seed = make();
+      this.setMeta("node_key_seed", seed);
+    }
+    return seed;
+  }
+
+  // after: { ts, key } where key is "chain:address"; the start is { ts: 0, key: "" }.
+  peerTokens(after, limit) {
+    return this.q.peerTokens.all(after.ts, after.ts, after.key, limit).map((r) => ({ ...r }));
+  }
+
+  peerCreations(after, limit) {
+    return this.q.peerCreations.all(after.ts, after.ts, after.key, limit).map((r) => ({ chain: r.chain, token: r.token, creation: JSON.parse(r.result), ts: r.computed_at }));
+  }
+
+  // A peer gave this token's creation: enrichment runs again, on the cheap path.
+  reEnrich(chain, address) {
+    this.q.reEnrich.run(chain, address);
+  }
+
+  // A live token's balances, read in one statement so they belong to one
+  // cursor: the follower applies each page in a transaction. Null when the
+  // token is not live here or has more holders than `max`.
+  holderSnapshot(chain, token, max) {
+    const st = this.indexState(chain, token);
+    if (!st || st.status !== "live") return null;
+    if (this.holderCount(chain, token) > max) return null;
+    const block = this.indexCursor(chain);
+    const holders = this.db.prepare("SELECT holder, balance FROM balances WHERE chain = ? AND token = ?").all(chain, token).map((r) => [r.holder, r.balance]);
+    return { block, holders };
+  }
+
+  // A verified snapshot at `block` replaces a backfilling token's balances;
+  // the backfill goes on from block + 1.
+  adoptSnapshot(chain, token, block, holders, now = Date.now()) {
+    this.db.exec("BEGIN");
+    try {
+      this.q.delBalances.run(chain, token);
+      for (const [holder, balance] of holders) this.q.putBalance.run(chain, token, holder, balance.toString(), Number(balance));
+      this.db.prepare("UPDATE index_tokens SET indexed_to = ?, updated_at = ? WHERE chain = ? AND token = ? AND status = 'backfill'").run(block, now, chain, token);
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
   }
 
   // ---- meta and retention ----
