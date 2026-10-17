@@ -4,6 +4,11 @@
 # Do NOT add auth here; every relay is already signed.
 
 services-beta.agentdata.network {
+	# PumpCheck 1.1 peer API (deploy/routes.json): node-to-node sync, never relays.
+	# Without Docker networking, point it at the backend's published peer port.
+	handle_path /pump-check-peer/* {
+		reverse_proxy pump-check-backend:8090
+	}
 	reverse_proxy 127.0.0.1:8080
 	# Relay bodies can be large; do not buffer or cap below the RelayMiner's limit.
 	request_body {

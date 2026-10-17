@@ -22,7 +22,7 @@
   "access": "public",
   "results": "variable",
   "serving": {
-    "backend": "The pump-check container (Node 22, SQLite store on a volume; built from github.com/TheFeloniousMonk/portal-services, pump-check/backend) behind the HA RelayMiner. It ingests new pools from DexPaprika every 2 minutes on a rolling 30-day credit ledger, precomputes each token through Pocket's public RPC (failing over to two public endpoints per chain only for request-time reads), and answers checks from the store plus live re-reads. Each supplier sets its own free DexPaprika key and Blockscout PRO API key in the app's Service settings; without them it serves with less coverage. Outbound HTTPS to the RPC endpoints, api.dexpaprika.com and api.blockscout.com.",
+    "backend": "The pump-check container (Node 22, SQLite store on a volume; built from github.com/TheFeloniousMonk/portal-services, pump-check/backend) behind the HA RelayMiner. It ingests new pools from DexPaprika every 2 minutes on a rolling 30-day credit ledger, precomputes each token through Pocket's public RPC (failing over to two public endpoints per chain only for request-time reads), and answers checks from the store plus live re-reads. Each supplier sets its own free DexPaprika and Blockscout keys in the app's Service settings. Since 1.1, suppliers' nodes share chain-verified token facts and Base holder snapshots over a peer API on port 8090, routed at /pump-check-peer (deploy/routes.json). Outbound HTTPS to the RPC endpoints, DexPaprika and Blockscout.",
     "implementations": ["pump-check >= 1.0"],
     "docs": "https://agentdata.network/pump-check/operators",
     "min_disk_gb": 2,
@@ -47,7 +47,7 @@
         "notes": "Functional probe: USDC's freeze authority, read live through Solana RPC. Stable, and proves a real chain read."
       }
     ],
-    "notes": "A check of 10 tokens answers within about 11 s. Gateway operators: type passthrough, rpc_types [\"rest\"], relay_timeout at least 15s; see sage-service.yaml in the service repository."
+    "notes": "A check of 10 tokens answers within about 11 s. SAGE operators: type generic (its name for passthrough), rpc_types [\"rest\"], relay_timeout at least 15s."
   },
   "docs": "https://agentdata.network/pump-check/",
   "updated": "2026-10-17"
