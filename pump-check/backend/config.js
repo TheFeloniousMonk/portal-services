@@ -97,6 +97,8 @@ export const config = Object.freeze({
   // Pons launches are read from the factory's logs, which costs no credits.
   ponsIngest: bool(process.env.PUMP_PONS_INGEST, true),
   precomputeConcurrency: num(process.env.PUMP_PRECOMPUTE_CONCURRENCY, 4),
+  // Background enrichment (on-chain deployer, holders): about 30 calls a token.
+  enrichConcurrency: num(process.env.PUMP_ENRICH_CONCURRENCY, 3),
   // Precompute waits and retries Pocket rather than spilling ingest volume
   // onto the free backup endpoints.
   precomputeRetryMs: num(process.env.PUMP_PRECOMPUTE_RETRY_MS, 30000),
@@ -105,6 +107,24 @@ export const config = Object.freeze({
   // Sniper analysis looks at buys in this window after the pool opened.
   // Seconds, not blocks: Robinhood Chain makes about ten blocks a second.
   sniperWindowSeconds: num(process.env.PUMP_SNIPER_WINDOW_SECONDS, 6),
+
+  // --- holder index (Transfer events, for chains Blockscout's plan excludes) ---
+  // Base by default: Blockscout's free plan has not covered it since 2026-10-01.
+  indexChains: str(process.env.PUMP_INDEX_CHAINS, "base")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+  indexIntervalMs: num(process.env.PUMP_INDEX_INTERVAL_MS, 15000),
+  // Addresses per eth_getLogs while following; split further when a node refuses.
+  indexBatch: num(process.env.PUMP_INDEX_BATCH, 100),
+  indexFollowPagesPerTick: num(process.env.PUMP_INDEX_FOLLOW_PAGES, 4),
+  indexBackfillTokensPerTick: num(process.env.PUMP_INDEX_BACKFILL_TOKENS, 8),
+  indexBackfillPagesPerTick: num(process.env.PUMP_INDEX_BACKFILL_PAGES, 10),
+  // A token's history beyond either limit is not indexed (holders read unknown).
+  indexMaxTransfers: num(process.env.PUMP_INDEX_MAX_TRANSFERS, 200000),
+  indexMaxPages: num(process.env.PUMP_INDEX_MAX_PAGES, 400),
+  // The widest single backfill page, in blocks, once pages come back sparse.
+  indexMaxSpan: num(process.env.PUMP_INDEX_MAX_SPAN, 64000),
 
   // --- checks ------------------------------------------------------------
   maxTokens: num(process.env.PUMP_MAX_TOKENS, 10),

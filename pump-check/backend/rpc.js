@@ -24,6 +24,14 @@ const ENDPOINT_FAULT =
   /not (supported|available|allowed|found: method)|unsupported|method not found|does not exist|excluded from account secondary indexes|block range|range (is )?too (large|wide)|too many|exceed|limit|query returned more than|timeout|timed out|unavailable|busy|overloaded|missing trie node|header not found|state not available|pruned|internal error/i;
 const ENDPOINT_FAULT_CODES = new Set([-32601, -32005, -32603, -32001, -32004, 429]);
 
+// eth_getLogs answers that say "this query is too big here": the caller splits
+// the range or the address list and asks again. They are not endpoint faults,
+// so they never count toward the circuit breaker. Seen on Pocket's Base nodes
+// on 2026-10-17: "getLogs scan work too large: addresses x blocks exceeds this
+// endpoint" and "query exceeds max results 20000, retry with the range a-b".
+const RANGE_LIMIT = /scan work too large|exceeds max results|retry with the range|block range|range (is )?too (large|wide)|query returned more than|too many (results|logs|blocks)|response size|limit exceeded|exceeds? (the )?(maximum|limit)/i;
+export const isRangeLimit = (e) => e instanceof RpcError && e.kind === "range";
+
 const hostOf = (url) => {
   try {
     return new URL(url).host;
@@ -128,7 +136,8 @@ export class ChainRpc {
       return { fault: "bad_response" };
     }
     if (body && body.error) {
-      const msg = String(body.error.message || "");
+      const msg = String(body.error.message || "") + " " + (typeof body.error.data === "string" ? body.error.data : "");
+      if (method === "eth_getLogs" && RANGE_LIMIT.test(msg)) return { range: msg.slice(0, 200) };
       if (ENDPOINT_FAULT_CODES.has(body.error.code) || ENDPOINT_FAULT.test(msg)) {
         // A revert can say "limit" or "exceed" in its own text; code 3 and
         // revert data mean the contract answered, so it is not an endpoint fault.
@@ -149,6 +158,10 @@ export class ChainRpc {
       if (failover && (ep.open || this.stale(ep)) && ep !== candidates[candidates.length - 1]) continue;
       if (minHead !== null && ep.head !== null && ep.head < minHead && failover && ep !== candidates[candidates.length - 1]) continue;
       const out = await this.raw(ep, method, params);
+      if (out.range) {
+        ep.ok();
+        throw new RpcError("range", out.range, { endpoint: ep.host });
+      }
       if (out.fault) {
         ep.fail(out.fault);
         lastFault = ep.host + ": " + out.fault;
@@ -238,7 +251,9 @@ export class EvmRpc extends ChainRpc {
   }
 
   // eth_getLogs paged to each endpoint's allowed range (PUMP_LOG_PAGE_BLOCKS
-  // by default, smaller where an endpoint declares less).
+  // by default, smaller where an endpoint declares less). A page the node finds
+  // too big is split: the block range first, then an address list. A single
+  // block for a single address that is still too big throws.
   async getLogs({ address, topics, fromBlock, toBlock }, opts = {}) {
     const logs = [];
     const page = Math.max(1, opts.pageBlocks || this.opts.logPageBlocks);
@@ -248,14 +263,35 @@ export class EvmRpc extends ChainRpc {
       const ep = opts.failover === false ? this.primary : this.endpoints.find((e) => !e.open && !this.stale(e)) || this.primary;
       const span = Math.min(page, ep.maxLogRange || page);
       const end = Math.min(toBlock, start + span - 1);
-      const filter = { fromBlock: "0x" + start.toString(16), toBlock: "0x" + end.toString(16), topics };
-      if (address) filter.address = address;
-      const out = await this.call("eth_getLogs", [filter], opts);
+      const out = await this.logsSplitting(address, topics, start, end, opts);
       endpoint = out.endpoint;
-      logs.push(...out.result);
+      for (const l of out.result) logs.push(l);
       start = end + 1;
     }
     return { result: logs, endpoint };
+  }
+
+  async logsSplitting(address, topics, from, to, opts, depth = 0) {
+    const filter = { fromBlock: "0x" + from.toString(16), toBlock: "0x" + to.toString(16), topics };
+    if (address) filter.address = address;
+    try {
+      return await this.call("eth_getLogs", [filter], opts);
+    } catch (e) {
+      if (!isRangeLimit(e) || depth > 24) throw e;
+      if (to > from) {
+        const mid = Math.floor((from + to) / 2);
+        const a = await this.logsSplitting(address, topics, from, mid, opts, depth + 1);
+        const b = await this.logsSplitting(address, topics, mid + 1, to, opts, depth + 1);
+        return { result: a.result.concat(b.result), endpoint: b.endpoint };
+      }
+      if (Array.isArray(address) && address.length > 1) {
+        const half = Math.ceil(address.length / 2);
+        const a = await this.logsSplitting(address.slice(0, half), topics, from, to, opts, depth + 1);
+        const b = await this.logsSplitting(address.slice(half), topics, from, to, opts, depth + 1);
+        return { result: a.result.concat(b.result), endpoint: b.endpoint };
+      }
+      throw e;
+    }
   }
 }
 

@@ -9,6 +9,7 @@ export class Worker {
     this.config = config;
     this.active = 0;
     this.retryAt = new Map(); // "chain:address" -> time
+    this.enrichTries = new Map(); // "chain:address" -> attempts
     this.timer = null;
     this.stopped = false;
     this.stats = { done: 0, not_found: 0, failed: 0, last_error: null, last_done_at: null, enriched: 0, enrich_last_error: null };
@@ -42,25 +43,41 @@ export class Worker {
     for (const t of picks) this.run(t.chain, t.address);
   }
 
-  // The Blockscout enrichment queue: one EVM token at a time, most active
-  // first, never in a check's path. Waits while the daily credits are spent.
+  // The enrichment queue: one EVM token at a time, tokens a caller asked
+  // about first, then the most active, never in a check's path. Each finds the
+  // creation block and deployer on chain, then enrols the token in the holder
+  // index or asks Blockscout for holders (which stops itself near the daily
+  // credit limit).
   async enrich() {
     if (this.enriching || this.stopped) return;
-    const bs = this.checker.evm.base.blockscout;
-    if (bs && bs.exhausted) return;
     this.enriching = true;
     try {
-      for (let i = 0; i < 6 && !this.stopped; i++) {
-        const [t] = this.store.pendingEnrich(1);
-        if (!t) break;
-        try {
-          await this.checker.enrichEvm(t.chain, t.address);
-          this.stats.enriched++;
-        } catch (e) {
-          this.stats.enrich_last_error = (e && (e.kind || e.code || e.message)) || "error";
-        }
-        // Marked either way, so a failing token cannot spend credits in a loop.
-        this.store.markEnriched(t.chain, t.address);
+      for (let round = 0; round < 4 && !this.stopped; round++) {
+        const batch = this.store.pendingEnrich(this.config.enrichConcurrency);
+        if (!batch.length) break;
+        await Promise.all(
+          batch.map(async (t) => {
+            const key = t.chain + ":" + t.address;
+            let retry = false;
+            try {
+              const out = await this.checker.enrichEvm(t.chain, t.address);
+              retry = Boolean(out && out.retry);
+              this.stats.enriched++;
+            } catch (e) {
+              retry = true;
+              this.stats.enrich_last_error = (e && (e.kind || e.code || e.message)) || "error";
+            }
+            // An unresolved deployer is tried again on two later passes, then left.
+            const n = (this.enrichTries.get(key) || 0) + 1;
+            if (retry && n < 3) {
+              this.enrichTries.set(key, n);
+              this.store.deferEnrich(t.chain, t.address);
+            } else {
+              this.enrichTries.delete(key);
+              this.store.markEnriched(t.chain, t.address);
+            }
+          })
+        );
       }
     } finally {
       this.enriching = false;

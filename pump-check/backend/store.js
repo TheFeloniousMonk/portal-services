@@ -6,6 +6,8 @@
 // checks   one row per (token, check id): the stored result and when it was read
 // market   the latest DexPaprika snapshot per token
 // ledger   DexPaprika credits spent per hour, for the rolling 30-day window
+// balances every holder's balance per indexed token, from Transfer events
+// index_tokens  each indexed token's state: backfill, live or too_busy
 
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
@@ -42,6 +44,19 @@ CREATE TABLE IF NOT EXISTS market (
   PRIMARY KEY (chain, token)
 );
 CREATE TABLE IF NOT EXISTS ledger (hour INTEGER PRIMARY KEY, credits INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS balances (
+  chain TEXT NOT NULL, token TEXT NOT NULL, holder TEXT NOT NULL,
+  balance TEXT NOT NULL, approx REAL NOT NULL,
+  PRIMARY KEY (chain, token, holder)
+);
+CREATE INDEX IF NOT EXISTS balances_top ON balances (chain, token, approx DESC);
+CREATE TABLE IF NOT EXISTS index_tokens (
+  chain TEXT NOT NULL, token TEXT NOT NULL,
+  status TEXT NOT NULL, start_block INTEGER NOT NULL, indexed_to INTEGER NOT NULL,
+  transfers INTEGER NOT NULL DEFAULT 0, pages INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL,
+  PRIMARY KEY (chain, token)
+);
+CREATE INDEX IF NOT EXISTS index_tokens_status ON index_tokens (chain, status);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
@@ -103,6 +118,7 @@ export class Store {
         "SELECT COUNT(*) AS n FROM tokens WHERE chain != 'solana' AND precomputed_at IS NOT NULL AND enriched_at IS NULL"
       ),
       markRequested: this.db.prepare("UPDATE tokens SET requested_at = ? WHERE chain = ? AND address = ?"),
+      deferEnrich: this.db.prepare("UPDATE tokens SET requested_at = NULL, heat = -1 WHERE chain = ? AND address = ?"),
       markEnriched: this.db.prepare("UPDATE tokens SET enriched_at = ? WHERE chain = ? AND address = ?"),
       recent: this.db.prepare(
         "SELECT * FROM tokens WHERE chain = ? AND precomputed_at IS NOT NULL ORDER BY first_seen DESC LIMIT ?"
@@ -115,6 +131,27 @@ export class Store {
       ),
       spentSince: this.db.prepare("SELECT COALESCE(SUM(credits), 0) AS n FROM ledger WHERE hour >= ?"),
       pruneLedger: this.db.prepare("DELETE FROM ledger WHERE hour < ?"),
+      getBalance: this.db.prepare("SELECT balance FROM balances WHERE chain = ? AND token = ? AND holder = ?"),
+      putBalance: this.db.prepare(
+        "INSERT INTO balances (chain, token, holder, balance, approx) VALUES (?, ?, ?, ?, ?) ON CONFLICT (chain, token, holder) DO UPDATE SET balance = excluded.balance, approx = excluded.approx"
+      ),
+      delBalance: this.db.prepare("DELETE FROM balances WHERE chain = ? AND token = ? AND holder = ?"),
+      delBalances: this.db.prepare("DELETE FROM balances WHERE chain = ? AND token = ?"),
+      topBalances: this.db.prepare("SELECT holder, balance FROM balances WHERE chain = ? AND token = ? ORDER BY approx DESC LIMIT ?"),
+      allBalances: this.db.prepare("SELECT balance FROM balances WHERE chain = ? AND token = ?"),
+      holderCount: this.db.prepare("SELECT COUNT(*) AS n FROM balances WHERE chain = ? AND token = ?"),
+      enrollIndex: this.db.prepare(
+        "INSERT INTO index_tokens (chain, token, status, start_block, indexed_to, updated_at) VALUES (?, ?, 'backfill', ?, ?, ?) ON CONFLICT (chain, token) DO NOTHING"
+      ),
+      indexTokens: this.db.prepare(
+        "SELECT i.token, i.indexed_to, i.transfers, i.pages FROM index_tokens i LEFT JOIN tokens t ON t.chain = i.chain AND t.address = i.token WHERE i.chain = ? AND i.status = ? ORDER BY (t.requested_at IS NULL), t.requested_at DESC, i.updated_at"
+      ),
+      indexState: this.db.prepare("SELECT * FROM index_tokens WHERE chain = ? AND token = ?"),
+      setIndexStatus: this.db.prepare("UPDATE index_tokens SET status = ?, updated_at = ? WHERE chain = ? AND token = ?"),
+      advanceIndex: this.db.prepare(
+        "UPDATE index_tokens SET indexed_to = ?, transfers = transfers + ?, pages = pages + 1, updated_at = ? WHERE chain = ? AND token = ?"
+      ),
+      indexCounts: this.db.prepare("SELECT status, COUNT(*) AS n FROM index_tokens WHERE chain = ? GROUP BY status"),
       getMeta: this.db.prepare("SELECT value FROM meta WHERE key = ?"),
       setMeta: this.db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value"),
       inactive: this.db.prepare("SELECT chain, address FROM tokens WHERE last_active < ?"),
@@ -216,6 +253,10 @@ export class Store {
     this.q.markRequested.run(now, chain, address);
   }
 
+  deferEnrich(chain, address) {
+    this.q.deferEnrich.run(chain, address);
+  }
+
   markEnriched(chain, address, now = Date.now()) {
     this.q.markEnriched.run(now, chain, address);
   }
@@ -238,6 +279,100 @@ export class Store {
     return this.q.spentSince.get(Math.floor(now / HOUR) - hours + 1).n;
   }
 
+  // ---- holder index ----
+
+  indexCursor(chain) {
+    return this.meta("index_cursor:" + chain);
+  }
+
+  setIndexCursor(chain, block) {
+    this.setMeta("index_cursor:" + chain, block);
+  }
+
+  enrollIndex(chain, token, creationBlock, now = Date.now()) {
+    this.q.enrollIndex.run(chain, token, creationBlock, creationBlock - 1, now);
+  }
+
+  indexTokens(chain, status) {
+    return this.q.indexTokens.all(chain, status).map((r) => ({ ...r }));
+  }
+
+  indexState(chain, token) {
+    return this.q.indexState.get(chain, token) || null;
+  }
+
+  setIndexStatus(chain, token, status, now = Date.now()) {
+    this.q.setIndexStatus.run(status, now, chain, token);
+  }
+
+  // Stops indexing a token and drops its partial balances.
+  dropIndex(chain, token, status, now = Date.now()) {
+    this.db.exec("BEGIN");
+    try {
+      this.q.delBalances.run(chain, token);
+      this.q.setIndexStatus.run(status, now, chain, token);
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+
+  // deltas: Map(token -> Map(holder -> bigint change)). With `cursor`, the
+  // chain's follow cursor moves in the same transaction; with `token`, that
+  // token's backfill position does.
+  applyBalances(chain, deltas, { cursor = null, token = null, indexedTo = null, transfers = 0 } = {}, now = Date.now()) {
+    this.db.exec("BEGIN");
+    try {
+      for (const [t, m] of deltas) {
+        for (const [holder, d] of m) {
+          if (d === 0n) continue;
+          const row = this.q.getBalance.get(chain, t, holder);
+          const next = (row ? BigInt(row.balance) : 0n) + d;
+          if (next <= 0n) this.q.delBalance.run(chain, t, holder);
+          else this.q.putBalance.run(chain, t, holder, next.toString(), Number(next));
+        }
+      }
+      if (token !== null) this.q.advanceIndex.run(indexedTo, transfers, now, chain, token);
+      if (cursor !== null) this.q.setMeta.run("index_cursor:" + chain, JSON.stringify(cursor));
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+
+  // Starts a token's backfill over from its creation block.
+  resetIndex(chain, token, now = Date.now()) {
+    const st = this.indexState(chain, token);
+    if (!st) return;
+    this.db.exec("BEGIN");
+    try {
+      this.q.delBalances.run(chain, token);
+      this.db.prepare("UPDATE index_tokens SET status = 'backfill', indexed_to = start_block - 1, transfers = 0, pages = 0, updated_at = ? WHERE chain = ? AND token = ?").run(now, chain, token);
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+
+  topBalances(chain, token, n) {
+    return this.q.topBalances.all(chain, token, n).map((r) => ({ holder: r.holder, balance: r.balance }));
+  }
+
+  balanceTotal(chain, token) {
+    return this.q.allBalances.all(chain, token).reduce((n, r) => n + BigInt(r.balance), 0n);
+  }
+
+  holderCount(chain, token) {
+    return this.q.holderCount.get(chain, token).n;
+  }
+
+  indexCounts(chain) {
+    return Object.fromEntries(this.q.indexCounts.all(chain).map((r) => [r.status, r.n]));
+  }
+
   // ---- meta and retention ----
 
   meta(key) {
@@ -256,7 +391,7 @@ export class Store {
     if (!gone.length) return 0;
     this.db.exec("BEGIN");
     try {
-      const del = ["tokens", "pools", "checks", "market"].map((t) =>
+      const del = ["tokens", "pools", "checks", "market", "balances", "index_tokens"].map((t) =>
         this.db.prepare(`DELETE FROM ${t} WHERE chain = ? AND ${t === "tokens" ? "address" : "token"} = ?`)
       );
       for (const g of gone) for (const d of del) d.run(g.chain, g.address);

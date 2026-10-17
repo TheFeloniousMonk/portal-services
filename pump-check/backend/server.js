@@ -27,6 +27,7 @@ import { Blockscout } from "./blockscout.js";
 import { Checker, validAddress } from "./checker.js";
 import { Ingest } from "./ingest.js";
 import { Worker } from "./worker.js";
+import { HolderIndex } from "./holders.js";
 import { CHECK_IDS } from "./verdict.js";
 
 const SCHEMA_VERSION = "1";
@@ -119,14 +120,15 @@ export function build({ store = new Store(config.dataDir), fetchImpl = globalThi
     robinhood: new EvmChain("robinhood", rpc.robinhood, { blockscout, config }),
   };
   const dexpaprika = new DexPaprika(store, { fetchImpl, ...dexpaprikaOptions });
-  const checker = new Checker({ store, dexpaprika, rpc, evm, config });
+  const holderIndex = new HolderIndex({ store, evm, config });
+  const checker = new Checker({ store, dexpaprika, rpc, evm, config, holderIndex });
   const ingest = new Ingest({ store, dexpaprika, evm, config });
   const worker = new Worker({ store, checker, config });
-  return { store, rpc, evm, blockscout, dexpaprika, checker, ingest, worker };
+  return { store, rpc, evm, blockscout, dexpaprika, checker, ingest, worker, holderIndex };
 }
 
 export function createServer(app) {
-  const { store, rpc, checker, ingest, worker, dexpaprika, blockscout } = app;
+  const { store, rpc, checker, ingest, worker, dexpaprika, blockscout, holderIndex } = app;
 
   const chainUp = (c) => rpc[c].healthy;
   const anyChainUp = () => CHAINS.some(chainUp);
@@ -271,6 +273,7 @@ export function createServer(app) {
           store: store.counts(),
           dexpaprika: dexpaprika.status(),
           blockscout: blockscout.status(),
+          holder_index: holderIndex.status(),
           rpc: Object.fromEntries(CHAINS.map((c) => [c, rpc[c].status()])),
         });
         return;
@@ -331,6 +334,7 @@ export async function main() {
   headTimer.unref();
   app.ingest.start(() => app.worker.kick());
   app.worker.start();
+  app.holderIndex.start();
   const pruneTimer = setInterval(() => {
     try {
       const n = app.store.prune(config.retentionDays);
@@ -357,6 +361,7 @@ export async function main() {
     process.on(signal, () => {
       app.ingest.stop();
       app.worker.stop();
+      app.holderIndex.stop();
       server.close(() => {
         app.store.close();
         process.exit(0);

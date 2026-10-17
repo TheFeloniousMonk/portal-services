@@ -111,6 +111,7 @@ export const TOPIC = {
   v4Initialize: keccakText("Initialize(bytes32,address,address,uint24,int24,address,uint160,int24)"),
   ponsCurveBuy: keccakText("CurveBuy(address,address,uint256,uint256,uint256,uint256)"),
   ponsLaunched: keccakText("TokenLaunched(address,address,address,address,uint256,uint256)"),
+  transfer: keccakText("Transfer(address,address,uint256)"),
 };
 
 const lc = (a) => (a ? String(a).toLowerCase() : a);
@@ -615,6 +616,74 @@ export class EvmChain {
           .map(([address, v]) => ({ address, pct: pctOf(v, supply) })),
       },
     };
+  }
+
+  // ---- creation block and deployer, from chain data alone ----
+
+  // The block the token's code appeared in, by binary search on eth_getCode
+  // (both chains' Pocket nodes keep full history), then the sender of the
+  // first mint in that block. About 27 calls, no indexer. `hi` is any block
+  // where the code already exists (a pool's creation block narrows nothing
+  // below it, so the search runs over [0, hi]).
+  async creation(token, hi, opts = { failover: false }) {
+    let lo = 0;
+    let top = hi;
+    const has = async (b) => {
+      const { result } = await this.rpc.getCode(token, b, opts);
+      return Boolean(result && result !== "0x");
+    };
+    if (!(await has(top))) return null;
+    while (lo < top) {
+      const mid = Math.floor((lo + top) / 2);
+      if (await has(mid)) top = mid;
+      else lo = mid + 1;
+    }
+    const block = lo;
+    // The first mint (Transfer from the zero address) from that block on.
+    // Robinhood Chain makes about ten blocks a second, so the window is in blocks.
+    const window = this.chain === "robinhood" ? 3000 : 300;
+    const zeroTopic = "0x" + "0".repeat(64);
+    // Pocket's Base nodes do not all answer old log queries alike: on
+    // 2026-10-17 one returned no logs for a block where another returned the
+    // mint. So an empty or refused answer is asked again once.
+    const mintsOnce = () =>
+      this.rpc
+        .getLogs({ address: token, topics: [TOPIC.transfer, zeroTopic], fromBlock: block, toBlock: block + window }, { ...opts, pageBlocks: window + 1 })
+        .then((r) => r.result)
+        .catch(() => []);
+    let mints = await mintsOnce();
+    if (!mints.length) mints = await mintsOnce();
+    const first = mints[0];
+    if (!first) {
+      // No mint found: the creation block's own contract-creation transaction.
+      const direct = await this.creatorFromBlock(token, block, opts).catch(() => null);
+      if (direct) return { block, deployer: direct.from, through: null, method: "definitive", tx: direct.hash };
+      return { block, deployer: null, through: null, method: null };
+    }
+    const { result: tx } = await this.rpc.call("eth_getTransactionByHash", [first.transactionHash], opts);
+    if (!tx) return { block, deployer: null, through: null, method: null };
+    return {
+      block,
+      deployer: lc(tx.from),
+      // A token made by a factory or a CREATE2 deployer names it here; a direct
+      // deployment has no "to".
+      through: tx.to ? lc(tx.to) : null,
+      // The mint in the creation block is the creation transaction itself.
+      method: Number(BigInt(first.blockNumber)) === block ? "definitive" : "heuristic",
+      tx: first.transactionHash,
+    };
+  }
+
+  // A token deployed directly by a wallet: the transaction in its creation
+  // block with no "to" whose receipt names the token as the contract created.
+  async creatorFromBlock(token, block, opts) {
+    const { result: blk } = await this.rpc.call("eth_getBlockByNumber", ["0x" + block.toString(16), true], opts);
+    if (!blk || !Array.isArray(blk.transactions)) return null;
+    for (const t of blk.transactions.filter((x) => x && x.to === null).slice(0, 20)) {
+      const { result: rc } = await this.rpc.call("eth_getTransactionReceipt", [t.hash], opts);
+      if (rc && lc(rc.contractAddress) === token) return { from: lc(t.from), hash: t.hash };
+    }
+    return null;
   }
 
   async balanceOf(token, holder, block, opts) {

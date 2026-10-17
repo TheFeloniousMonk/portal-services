@@ -80,7 +80,8 @@ export function structureChecks(st, block, source) {
 }
 
 export class Checker {
-  constructor({ store, dexpaprika, rpc, evm, config }) {
+  constructor({ store, dexpaprika, rpc, evm, config, holderIndex = null }) {
+    this.holderIndex = holderIndex;
     this.store = store;
     this.dexpaprika = dexpaprika;
     this.rpc = rpc; // {solana, base, robinhood}
@@ -227,19 +228,21 @@ export class Checker {
     // Holders and the deployer come from Blockscout, which answers in 3 to 10
     // seconds, so they are filled in by the enrichment queue and never block
     // a check. Until then they say so.
-    const why = ev.blockscoutUnavailable();
-    const queued = (what) => (why ? notOffered(why) : { result: "unknown", reason: what + " is queued for Blockscout; ask again in a minute", method: null, source: null });
-    put("holder_concentration", queued("the holder list"));
+    const pending = (what) => ({ result: "unknown", reason: what, method: null, source: null });
+    if (!(this.holderIndex && this.holderIndex.indexes(chain))) {
+      const why = ev.blockscoutUnavailable();
+      put("holder_concentration", why ? notOffered(why) : pending("the holder list is queued for Blockscout; ask again in a minute"));
+    }
     if (deployer) await this.putDeployer(chain, token, deployer, launchpad, id.supply, block, opts);
     else {
-      put("creator_holding", queued("the deployer"));
-      put("deployer", queued("the deployer"));
+      put("creator_holding", pending("the deployer is being looked up on chain; ask again in a minute"));
+      put("deployer", pending("the deployer is being looked up on chain; ask again in a minute"));
     }
     return { found: true };
   }
 
   // The deployer, and what it still holds at `block`.
-  async putDeployer(chain, token, deployer, launchpad, supply, block, opts) {
+  async putDeployer(chain, token, deployer, launchpad, supply, block, opts, { through = null, method = "definitive" } = {}) {
     const ev = this.evm[chain];
     const bal = await ev.balanceOf(token, deployer, block, opts).catch(() => null);
     const share = bal !== null && supply ? pct(bal, supply) : null;
@@ -257,58 +260,75 @@ export class Checker {
       },
       now
     );
-    this.store.putCheck(chain, token, "deployer", { result: "pass", value: { deployer, launchpad }, method: "definitive", source: "stored", as_of: { block } }, now);
+    const value = { deployer, launchpad };
+    // A token made through a factory or a CREATE2 deployer names that contract.
+    if (through) value.created_through = through;
+    this.store.putCheck(chain, token, "deployer", { result: "pass", value, method, source: "stored", as_of: { block } }, now);
   }
 
-  // Blockscout enrichment for one EVM token: creator (unless Pons already
-  // named it), holder concentration, and the deployer's holding. Run by the
-  // worker's enrichment queue, one token at a time, most active first.
+  // Background enrichment for one EVM token, never in a check's path:
+  //   - its creation block and deployer, from chain data (EvmChain.creation);
+  //   - on an indexed chain, enrolment in the holder index from that block;
+  //   - elsewhere, holder concentration from Blockscout.
   async enrichEvm(chain, token) {
     const ev = this.evm[chain];
     const opts = { failover: false };
-    const why = ev.blockscoutUnavailable();
     const tok = this.store.token(chain, token);
     if (!tok) return;
     const stored = this.store.checks(chain, token);
-    if (why) {
-      for (const id of ["holder_concentration", "creator_holding", "deployer"]) {
-        if (!stored[id] || stored[id].result === "unknown") this.store.putCheck(chain, token, id, notOffered(why));
-      }
-      return;
-    }
     const supply = tok.supply ? BigInt(tok.supply) : null;
     const pons = stored._pons || null;
-    const exclude = new Set([...this.store.pools(chain, token).map((p) => p.address), ev.addr.uniV4PoolManager, ...EVM_LP_LOCKERS[chain].keys()]);
-    if (pons) exclude.add(pons.curve);
-    this.store.putCheck(chain, token, "holder_concentration", await ev.holders(token, supply, exclude).catch(() => unknown("holders could not be read")));
-    if (pons) return;
-    const info = await ev.creator(token).catch(() => null);
-    const block = await ev.rpc.blockNumber(opts);
-    if (info && info.creator) {
-      // Blockscout's creator is the contract that ran CREATE: a launchpad
-      // factory, a generic CREATE2 deployer, or the person's own wallet. The
-      // person is the creation transaction's sender, one RPC read away.
-      let sender = null;
-      if (info.creationTx) {
-        const r = await ev.rpc.call("eth_getTransactionByHash", [info.creationTx], opts).catch(() => null);
-        if (r && r.result && r.result.from) sender = String(r.result.from).toLowerCase();
+    const head = await ev.rpc.blockNumber(opts);
+
+    // Creation block and deployer (Pons already named the deployer, but the
+    // creation block is still needed for the holder index).
+    // Stored only once the deployer is known: a node that answered an old
+    // log query with nothing should not settle the question for good.
+    let creation = stored._creation || null;
+    if (!creation) {
+      creation = await ev.creation(token, head, opts);
+      if (creation && creation.deployer) this.store.putCheck(chain, token, "_creation", creation);
+    }
+    const retry = Boolean(!pons && (!creation || !creation.deployer));
+    if (creation && !pons) {
+      if (creation.deployer) {
+        const through = creation.through;
+        const launchpad = ev.launchpadOf(through) || tok.launchpad || null;
+        this.store.setIdentity(chain, token, { deployer: creation.deployer, launchpad });
+        await this.putDeployer(chain, token, creation.deployer, launchpad, supply, head, opts, { through, method: creation.method });
+      } else {
+        const v = unknown("no mint transfer near the creation block, so the deployer could not be read");
+        this.store.putCheck(chain, token, "deployer", { ...v, value: { creation_block: creation.block } });
+        this.store.putCheck(chain, token, "creator_holding", v);
       }
-      const launchpad = ev.launchpadOf(info.creator) || tok.launchpad || null;
-      if (launchpad) this.store.setIdentity(chain, token, { launchpad });
-      const deployer = sender || info.creator;
-      this.store.setIdentity(chain, token, { deployer });
-      await this.putDeployer(chain, token, deployer, launchpad, supply, block, opts);
-      if (sender && sender !== info.creator) {
-        // Record the creating contract too, for a caller who wants both.
-        const d = this.store.checks(chain, token).deployer;
-        if (d) this.store.putCheck(chain, token, "deployer", { ...d, computed_at: undefined, value: { ...d.value, created_through: info.creator } });
-      }
-    } else {
-      const later = ev.blockscoutUnavailable();
-      const v = later ? notOffered(later) : unknown(ev.blockscout.exhausted ? "Blockscout's daily credits are used up" : "creator not found");
+    } else if (!creation && !pons) {
+      const v = unknown("the creation block could not be found");
       this.store.putCheck(chain, token, "deployer", v);
       this.store.putCheck(chain, token, "creator_holding", v);
     }
+
+    // Holders.
+    if (this.holderIndex && this.holderIndex.indexes(chain)) {
+      if (creation) this.holderIndex.enroll(chain, token, creation.block);
+      return { retry };
+    }
+    const why = ev.blockscoutUnavailable();
+    if (why) {
+      this.store.putCheck(chain, token, "holder_concentration", notOffered(why));
+      return { retry };
+    }
+    this.store.putCheck(chain, token, "holder_concentration", await ev.holders(token, supply, this.holderExclusions(chain, token)).catch(() => unknown("holders could not be read")));
+    return { retry };
+  }
+
+  // Addresses that hold tokens without owning them: pools, the v4 PoolManager,
+  // the Pons curve, known lockers. Burn addresses are excluded where counted.
+  holderExclusions(chain, token) {
+    const ev = this.evm[chain];
+    const ex = new Set([...this.store.pools(chain, token).map((p) => p.address), ev.addr.uniV4PoolManager, ...EVM_LP_LOCKERS[chain].keys()]);
+    const pons = this.store.checks(chain, token)._pons;
+    if (pons) ex.add(pons.curve);
+    return ex;
   }
 
   // ======================= check =======================
@@ -475,6 +495,10 @@ export class Checker {
     }
     if (kind === "solana") {
       for (const [id, why] of Object.entries(NOT_OFFERED.solana)) checks[id] = notOffered(why);
+    }
+    if (kind === "evm" && this.holderIndex && this.holderIndex.indexes(chain)) {
+      const supplyNow = tok.supply ? BigInt(tok.supply) : null;
+      checks.holder_concentration = this.holderIndex.holderCheck(chain, address, supplyNow, this.holderExclusions(chain, address), this.config.topHoldersWarnPct);
     }
     // Taxes come out of the simulation.
     if (kind === "evm") {

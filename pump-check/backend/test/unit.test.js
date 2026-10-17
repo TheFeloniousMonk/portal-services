@@ -245,6 +245,37 @@ test("Blockscout: a chain outside the key's plan reads not_available, credits ar
   assert.equal(new Blockscout({ key: "" }).unavailable(4663), "this supplier has no Blockscout key");
 });
 
+// ---- holder index ----
+
+test("the holder index applies Transfer logs and reports the top-10 share", async () => {
+  const { HolderIndex } = await import("../holders.js");
+  const { TOPIC } = await import("../evm.js");
+  const store = new Store(":memory:");
+  const token = "0x00000000000000000000000000000000000000aa";
+  const pool = "0x00000000000000000000000000000000000000bb";
+  const alice = "0x00000000000000000000000000000000000000a1";
+  store.seeToken("base", token, {});
+  store.setIdentity("base", token, { supply: 1000n });
+  store.enrollIndex("base", token, 10);
+  store.setIndexCursor("base", 20);
+  const topic = (a) => "0x" + a.slice(2).padStart(64, "0");
+  const log = (from, to, v) => ({ address: token, topics: [TOPIC.transfer, topic(from), topic(to)], data: "0x" + word(v), removed: false });
+  const idx = new HolderIndex({ store, evm: { base: {} }, config: { indexChains: ["base"], indexMaxTransfers: 1e6, indexMaxPages: 100 } });
+  // mint 1000 to the pool, the pool sells 300 to alice, alice burns 100
+  idx.apply("base", [log("0x0000000000000000000000000000000000000000", pool, 1000n), log(pool, alice, 300n), log(alice, "0x0000000000000000000000000000000000000000", 100n)], { token, indexedTo: 20 });
+  store.setIndexStatus("base", token, "live");
+  store.setIdentity("base", token, { supply: 900n });
+  const c = idx.holderCheck("base", token, 900n, new Set([pool]), 50);
+  assert.equal(c.value.top10_pct, 22.22); // alice's 200 of 900, the pool excluded
+  assert.equal(c.value.reconciled, true);
+  assert.equal(c.as_of.block, 20);
+  assert.equal(store.holderCount("base", token), 2);
+  // a token past its budget reads unknown with the reason, and keeps no balances
+  store.dropIndex("base", token, "too_busy");
+  assert.match(idx.holderCheck("base", token, 900n, new Set(), 50).reason, /too many transfers/);
+  assert.equal(store.holderCount("base", token), 0);
+});
+
 // ---- verdict ----
 
 test("verdict rules", () => {
