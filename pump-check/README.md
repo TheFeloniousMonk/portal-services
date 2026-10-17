@@ -113,6 +113,8 @@ On Solana, whether a token can be sold is decided by the authority and extension
 4. **Index holders (Base).** Blockscout's free plan does not cover Base, so PumpCheck keeps its own index: each token's history is read from its creation block, page by page (pages widen while sparse), until it reaches the live cursor; from then on every indexed token is followed together, many addresses per log query, and balances are updated in the store. A token whose history passes 200,000 transfers or 400 pages is not indexed and says so. A backfill whose balances do not add up to the supply is re-read once, since a node can answer an old range with nothing. On 2026-10-17 it indexed a 10-day-old token (21,290 holders) and a busy 2-day-old one (130,908 holders), both matching their supply exactly. `PUMP_INDEX_CHAINS` adds Robinhood Chain for a supplier without a Blockscout key.
 5. **Check.** A request is answered from the store plus a few live reads: what can flip (authorities, owner, proxy admin) is re-read at the request's block or slot, and the honeypot simulation is redone when the stored one is older than two minutes. A token the store has never seen is found and checked on demand.
 
+6. **Share with peers (1.1.0).** Nodes behind the suppliers staked for `pump-check`, on MainNet and Beta alike, pull from each other every 5 minutes over a peer API of their own (below). Shared: tokens a node has precomputed (they join the other's queue at heat 0, and are precomputed there), Uniswap v2, v3 and v4 pools the chain confirms (by the factory, or the v4 Initialize event), each EVM token's creation block and deployer (checked in 3 to 5 reads instead of about 30), and Base holder snapshots for tokens the other node is still backfilling far behind. A snapshot is taken only if its balances add up to the supply at its block exactly and the 15 largest plus 20 random holders match `balanceOf` at that block; the backfill then goes on from that block. Never shared: anything that can flip (owner, proxy, honeypot, LP, market), sniper analysis (checking it means redoing it), the DexPaprika ledger and heat. A peer whose data fails a check loses points and is banned for an hour, doubling with each repeat.
+
 **RPC.** Each chain has three endpoints, Pocket's public gateway first. A request-time call moves to the next on a network error, a 4-second deadline, HTTP 429 or 5xx, or an "unsupported" error; a revert is an answer, never retried. An endpoint failing 5 calls in a row is skipped for 60 seconds, and one more than 20 blocks (50 slots) behind the best is treated as down. `/v1/capabilities` shows each endpoint's state.
 
 **Budgets.** DexPaprika: a ledger counts credits per hour over a rolling 30 days and stops at 95,000 (5% under the free key's 100,000); on-demand lookups are capped at 10 an hour. Blockscout: a holder list and an address lookup per EVM token, once, about 20 credits each (measured 2026-10-17 from the API's `x-credits-remaining` header), against the free plan's 100,000 a day; calls stop when fewer than 5,000 remain (`PUMP_BLOCKSCOUT_RESERVE`).
@@ -134,6 +136,8 @@ Blockscout is used only for Robinhood Chain holders. Its free plan has not cover
 
 Resources: 1 GB of RAM (the container is capped at 512 MB), 2 GB of disk for the store and the Base holder index, outbound HTTPS to the RPC endpoints, `api.dexpaprika.com` and `api.blockscout.com`. RPC volume is high: each new token costs about 4 (Solana) or 6 to 10 (EVM) calls on Pocket's gateway.
 
+**Peer API (1.1.0).** Port 8090 in the container, reached only through the supplier hostname's `/pump-check-peer/*` route ([`deploy/routes.json`](deploy/routes.json)), which the Pocket Service Manager installs into Caddy on deploy; the relayer knows only port 8080, so no relay reaches it and no peer call is paid for. Peers are found from the suppliers staked for `pump-check` (the chain indexer, or the chain API when the indexer is down) and a `POST /pump-check-peer/v1/hello` on each staked hostname; TLS on that hostname vouches for the node key it returns. Requests between nodes are signed with each node's own Ed25519 key, kept in the store (not the supplier key). Without the app, add `handle_path /pump-check-peer/* { reverse_proxy pump-check-backend:8090 }` to the hostname's Caddy site block, before its `reverse_proxy` to the relayer. `PUMP_PEER=false` turns sharing off; `/v1/capabilities` shows the node, its peers and what was pulled (`peer`).
+
 Deploy files are in [`deploy/`](deploy/): the compose file, the relayer block and `add-to-relayer.sh`, `settings.json` (the two settings above), `relay-test.sh`, and the Skill's rendered stake, SAGE and health-check configs in `rendered/`. Gateway operators: type `passthrough`, `rpc_types: ["rest"]`, `relay_timeout` of at least 15 s ([`deploy/rendered/sage-service.yaml`](deploy/rendered/sage-service.yaml)).
 
 ## Configuration
@@ -145,7 +149,7 @@ Every knob is a `PUMP_*` environment variable with a default in [`backend/config
 ```bash
 cd backend
 npm ci
-npm test            # 33 tests, offline: a recorded live session is replayed
+npm test            # 44 tests, offline: a recorded live session is replayed, and two peers sync against a fake chain
 node server.js      # live, on :8080 (PORT to change; PUMP_DATA_DIR for the store)
 ```
 
