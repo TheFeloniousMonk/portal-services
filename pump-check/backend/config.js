@@ -48,7 +48,7 @@ export const CHAINS = Object.freeze(["solana", "base", "robinhood"]);
 
 export const config = Object.freeze({
   service: "pump-check",
-  version: "1.0.0",
+  version: "1.1.0",
   port: num(process.env.PORT, 8080),
   dataDir: str(process.env.PUMP_DATA_DIR, "/data"),
 
@@ -144,4 +144,28 @@ export const config = Object.freeze({
   probeUsd: num(process.env.PUMP_PROBE_USD, 5),
 
   ingestOnStart: bool(process.env.PUMP_INGEST_ON_START, true),
+
+  // --- peer sync (peer/) ---------------------------------------------------
+  // Nodes behind the suppliers staked for pump-check share what never changes
+  // and holder snapshots, each checked against the chain on arrival.
+  peerEnabled: bool(process.env.PUMP_PEER, true),
+  // Its own port, routed by Caddy at /pump-check-peer; never the relay port.
+  peerPort: num(process.env.PUMP_PEER_PORT, 8090),
+  // Extra peers by hand, for development: "n_<node key>@<url>, ...".
+  peers: str(process.env.PUMP_PEERS, ""),
+  // The Pocket networks whose pump-check suppliers are peers ("" for none).
+  peerNetworks: str(process.env.PUMP_PEER_NETWORKS, "main,beta")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+  peerDiscoveryIntervalMs: num(process.env.PUMP_PEER_DISCOVERY_INTERVAL_MS, 30 * 60000),
+  peerSyncIntervalMs: num(process.env.PUMP_PEER_SYNC_INTERVAL_MS, 5 * 60000),
+  peerTimeoutMs: num(process.env.PUMP_PEER_TIMEOUT_MS, 20000),
+  peerTokensPerPull: num(process.env.PUMP_PEER_TOKENS_PER_PULL, 200),
+  // A snapshot is asked for only when the backfill is this many blocks behind
+  // (about 11 hours of Base), a few tokens per tick.
+  peerSnapshotMinBlocks: num(process.env.PUMP_PEER_SNAPSHOT_MIN_BLOCKS, 20000),
+  peerSnapshotsPerTick: num(process.env.PUMP_PEER_SNAPSHOTS_PER_TICK, 2),
+  peerMaxHolders: num(process.env.PUMP_PEER_MAX_HOLDERS, 20000),
+  peerAdoptWaitMs: num(process.env.PUMP_PEER_ADOPT_WAIT_MS, 5000),
 });

@@ -29,6 +29,7 @@ import { Ingest } from "./ingest.js";
 import { Worker } from "./worker.js";
 import { HolderIndex } from "./holders.js";
 import { CHECK_IDS } from "./verdict.js";
+import { buildPeer } from "./peer/index.js";
 
 const SCHEMA_VERSION = "1";
 const DISCLAIMER = "Facts about the token at the stated block. Not financial advice.";
@@ -124,11 +125,12 @@ export function build({ store = new Store(config.dataDir), fetchImpl = globalThi
   const checker = new Checker({ store, dexpaprika, rpc, evm, config, holderIndex });
   const ingest = new Ingest({ store, dexpaprika, evm, config });
   const worker = new Worker({ store, checker, config });
-  return { store, rpc, evm, blockscout, dexpaprika, checker, ingest, worker, holderIndex };
+  const peer = config.peerEnabled ? buildPeer({ store, evm, holderIndex, config, fetch: fetchImpl }) : null;
+  return { store, rpc, evm, blockscout, dexpaprika, checker, ingest, worker, holderIndex, peer };
 }
 
 export function createServer(app) {
-  const { store, rpc, checker, ingest, worker, dexpaprika, blockscout, holderIndex } = app;
+  const { store, rpc, checker, ingest, worker, dexpaprika, blockscout, holderIndex, peer } = app;
 
   const chainUp = (c) => rpc[c].healthy;
   const anyChainUp = () => CHAINS.some(chainUp);
@@ -274,6 +276,7 @@ export function createServer(app) {
           dexpaprika: dexpaprika.status(),
           blockscout: blockscout.status(),
           holder_index: holderIndex.status(),
+          peer: peer ? peer.status() : { enabled: false },
           rpc: Object.fromEntries(CHAINS.map((c) => [c, rpc[c].status()])),
         });
         return;
@@ -335,6 +338,10 @@ export async function main() {
   app.ingest.start(() => app.worker.kick());
   app.worker.start();
   app.holderIndex.start();
+  if (app.peer) {
+    app.peer.server.listen(config.peerPort, () => console.log(JSON.stringify({ msg: "peer API listening", port: config.peerPort, node: app.peer.node.id })));
+    app.peer.start();
+  }
   const pruneTimer = setInterval(() => {
     try {
       const n = app.store.prune(config.retentionDays);
@@ -362,6 +369,7 @@ export async function main() {
       app.ingest.stop();
       app.worker.stop();
       app.holderIndex.stop();
+      if (app.peer) app.peer.stop();
       server.close(() => {
         app.store.close();
         process.exit(0);

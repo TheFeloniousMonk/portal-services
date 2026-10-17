@@ -8,9 +8,12 @@ RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 # image (TaintCheck 1.1.0 shipped without one). test/ is excluded by
 # .dockerignore. probe-artifact.json is the compiled honeypot probe.
 COPY *.js openapi.json probe-artifact.json ./
+# The peer-sync modules (1.1.0) live in their own directory, which the glob above skips.
+COPY peer/ ./peer/
 RUN mkdir -p /data && chown -R node:node /data /app
 VOLUME ["/data"]
-EXPOSE 8080
+# 8080 serves relays; 8090 is the peer API, reached only through the /pump-check-peer route.
+EXPOSE 8080 8090
 USER node
 # Ready once an ingest has completed in the last 10 minutes and at least one
 # chain's RPC answers. The first ingest takes about 10 seconds.

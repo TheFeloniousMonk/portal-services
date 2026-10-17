@@ -1,0 +1,9 @@
+{
+  "routes": [
+    {
+      "path": "/pump-check-peer",
+      "port": 8090,
+      "purpose": "Node-to-node sync between PumpCheck suppliers (peer API, 1.1.0). The prefix is stripped before proxying."
+    }
+  ]
+}

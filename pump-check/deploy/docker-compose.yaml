@@ -5,7 +5,9 @@
 # network below. This file adds only the PumpCheck backend to that network;
 # each network's relayer reaches it as http://pump-check-backend:8080 once
 # relayer-service.yaml is merged into its relayer config (see
-# add-to-relayer.sh). Nothing here is exposed to the internet.
+# add-to-relayer.sh). Nothing here is published on the host: the relayer
+# reaches port 8080, and the supplier's Caddy reaches the peer port 8090 at
+# /pump-check-peer (routes.json), both over this network.
 #
 # The operator's settings (settings.json: the DexPaprika and Blockscout keys)
 # live in ../settings.env, beside backend/ and deploy/, so a redeploy never
@@ -22,7 +24,7 @@
 services:
   backend:
     build: ../backend
-    image: pump-check-backend:1.0.0
+    image: pump-check-backend:1.1.0
     container_name: pump-check-backend
     restart: unless-stopped
     env_file:
@@ -33,6 +35,8 @@ services:
     mem_limit: 512m
     expose:
       - "8080"
+      # The peer API (1.1.0): Caddy routes /pump-check-peer/* here (routes.json).
+      - "8090"
     networks: [supplier]
 
 volumes:
