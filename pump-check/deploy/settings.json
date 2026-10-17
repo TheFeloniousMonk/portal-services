@@ -22,7 +22,7 @@
     {
       "env": "PUMP_BLOCKSCOUT_API_KEY",
       "label": "Blockscout PRO API key",
-      "help": "Your own free key from blockscout.com (PRO API). It adds holder concentration and the deployer on Base and Robinhood Chain; without it those two checks read not_available.",
+      "help": "Your own key from dev.blockscout.com (PRO API). It adds holder concentration and the deployer on Robinhood Chain (free plan) and Base (Builder plan or above); without it those checks read not_available.",
       "type": "text",
       "secret": true,
       "max_length": 256

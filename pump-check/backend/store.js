@@ -53,6 +53,10 @@ export class Store {
     this.db = new DatabaseSync(dir === ":memory:" ? ":memory:" : join(dir, name));
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;");
     this.db.exec(SCHEMA);
+    // Added after the first build: stores created before it gain the column.
+    const cols = this.db.prepare("PRAGMA table_info(tokens)").all().map((r) => r.name);
+    if (!cols.includes("enriched_at")) this.db.exec("ALTER TABLE tokens ADD COLUMN enriched_at INTEGER");
+    if (!cols.includes("requested_at")) this.db.exec("ALTER TABLE tokens ADD COLUMN requested_at INTEGER");
     this.q = {
       upsertToken: this.db.prepare(`
         INSERT INTO tokens (chain, address, launchpad, created_at, created_block, first_seen, last_active, heat)
@@ -92,6 +96,14 @@ export class Store {
       ),
       pendingCount: this.db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE precomputed_at IS NULL"),
       markPrecomputed: this.db.prepare("UPDATE tokens SET precomputed_at = ?, precompute_error = ? WHERE chain = ? AND address = ?"),
+      pendingEnrich: this.db.prepare(
+        "SELECT chain, address FROM tokens WHERE chain != 'solana' AND precomputed_at IS NOT NULL AND enriched_at IS NULL ORDER BY (requested_at IS NULL), requested_at DESC, heat DESC, first_seen DESC LIMIT ?"
+      ),
+      pendingEnrichCount: this.db.prepare(
+        "SELECT COUNT(*) AS n FROM tokens WHERE chain != 'solana' AND precomputed_at IS NOT NULL AND enriched_at IS NULL"
+      ),
+      markRequested: this.db.prepare("UPDATE tokens SET requested_at = ? WHERE chain = ? AND address = ?"),
+      markEnriched: this.db.prepare("UPDATE tokens SET enriched_at = ? WHERE chain = ? AND address = ?"),
       recent: this.db.prepare(
         "SELECT * FROM tokens WHERE chain = ? AND precomputed_at IS NOT NULL ORDER BY first_seen DESC LIMIT ?"
       ),
@@ -189,6 +201,23 @@ export class Store {
 
   markPrecomputed(chain, address, error = null, now = Date.now()) {
     this.q.markPrecomputed.run(error ? null : now, error, chain, address);
+  }
+
+  pendingEnrich(limit) {
+    return this.q.pendingEnrich.all(limit);
+  }
+
+  pendingEnrichCount() {
+    return this.q.pendingEnrichCount.get().n;
+  }
+
+  // A caller asked about this token: its Blockscout enrichment goes first.
+  markRequested(chain, address, now = Date.now()) {
+    this.q.markRequested.run(now, chain, address);
+  }
+
+  markEnriched(chain, address, now = Date.now()) {
+    this.q.markEnriched.run(now, chain, address);
   }
 
   recent(chain, limit) {

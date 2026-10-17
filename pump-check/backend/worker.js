@@ -11,13 +11,16 @@ export class Worker {
     this.retryAt = new Map(); // "chain:address" -> time
     this.timer = null;
     this.stopped = false;
-    this.stats = { done: 0, not_found: 0, failed: 0, last_error: null, last_done_at: null };
+    this.stats = { done: 0, not_found: 0, failed: 0, last_error: null, last_done_at: null, enriched: 0, enrich_last_error: null };
   }
 
   start() {
     this.stopped = false;
     this.kick();
-    this.timer = setInterval(() => this.kick(), 5000);
+    this.timer = setInterval(() => {
+      this.kick();
+      this.enrich();
+    }, 5000);
     this.timer.unref?.();
   }
 
@@ -37,6 +40,31 @@ export class Worker {
       .filter((t) => !busy.has(t.chain + ":" + t.address) && (this.retryAt.get(t.chain + ":" + t.address) || 0) <= now)
       .slice(0, free);
     for (const t of picks) this.run(t.chain, t.address);
+  }
+
+  // The Blockscout enrichment queue: one EVM token at a time, most active
+  // first, never in a check's path. Waits while the daily credits are spent.
+  async enrich() {
+    if (this.enriching || this.stopped) return;
+    const bs = this.checker.evm.base.blockscout;
+    if (bs && bs.exhausted) return;
+    this.enriching = true;
+    try {
+      for (let i = 0; i < 6 && !this.stopped; i++) {
+        const [t] = this.store.pendingEnrich(1);
+        if (!t) break;
+        try {
+          await this.checker.enrichEvm(t.chain, t.address);
+          this.stats.enriched++;
+        } catch (e) {
+          this.stats.enrich_last_error = (e && (e.kind || e.code || e.message)) || "error";
+        }
+        // Marked either way, so a failing token cannot spend credits in a loop.
+        this.store.markEnriched(t.chain, t.address);
+      }
+    } finally {
+      this.enriching = false;
+    }
   }
 
   async run(chain, address) {
@@ -64,6 +92,6 @@ export class Worker {
   }
 
   status() {
-    return { concurrency: this.config.precomputeConcurrency, active: this.active, pending: this.store.pendingCount(), ...this.stats };
+    return { concurrency: this.config.precomputeConcurrency, active: this.active, pending: this.store.pendingCount(), enrich_pending: this.store.pendingEnrichCount(), ...this.stats };
   }
 }

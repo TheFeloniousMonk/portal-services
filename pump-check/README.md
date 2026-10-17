@@ -97,7 +97,7 @@ On Solana, whether a token can be sold is decided by the authority and extension
 | `launch_state` | Pons: curve or graduated, the curve's fee and creator tax, the snipe tax, and whether sells are paused for graduation | definitive |
 | `lp_status` | v2-style pairs: LP burned or in a known locker. Pons and launchpad pools: locked by design. Other v3/v4 positions: not read in v1 (`unknown`) | definitive / heuristic |
 | `holder_concentration` | Blockscout PRO API, excluding pools, the v4 PoolManager, the Pons curve, burn addresses and lockers | definitive as of Blockscout's index |
-| `deployer`, `creator_holding` | Blockscout creator (or the Pons launch record) and its balance now | definitive |
+| `deployer`, `creator_holding` | The sender of the token's creation transaction (found through Blockscout, or the Pons launch record), and its balance now; a token made through a launchpad or a CREATE2 deployer also names that contract as `created_through` | definitive |
 | `snipers_bundles` | Swaps in the first 6 seconds of the pool, buyers resolved to the transaction sender | definitive buyers, heuristic bundles |
 | `liquidity`, `age` | From the store | definitive |
 
@@ -109,11 +109,12 @@ On Solana, whether a token can be sold is decided by the authority and extension
 
 1. **Ingest.** Every 2 minutes, the newest pools on each chain from DexPaprika's list endpoints (one credit a page, however many rows), plus Pons launches from the factory's logs (free). New tokens join a queue, most active first.
 2. **Precompute.** A worker reads everything that never changes and a first reading of what can flip, through Pocket's public RPC only, and stores it with the block or slot it was read at. When Pocket is down the token waits; ingest volume never moves onto the backup endpoints.
-3. **Check.** A request is answered from the store plus a few live reads: what can flip (authorities, owner, proxy admin) is re-read at the request's block or slot, and the honeypot simulation is redone when the stored one is older than two minutes. A token the store has never seen is found and checked on demand.
+3. **Enrich.** Blockscout answers in 3 to 10 seconds, so holders and the deployer are read by a separate queue, one token at a time, tokens someone asked about first, then the most active. Until a token's turn comes, those checks say they are queued (`unknown`, never critical), and a check a minute later has them.
+4. **Check.** A request is answered from the store plus a few live reads: what can flip (authorities, owner, proxy admin) is re-read at the request's block or slot, and the honeypot simulation is redone when the stored one is older than two minutes. A token the store has never seen is found and checked on demand.
 
 **RPC.** Each chain has three endpoints, Pocket's public gateway first. A request-time call moves to the next on a network error, a 4-second deadline, HTTP 429 or 5xx, or an "unsupported" error; a revert is an answer, never retried. An endpoint failing 5 calls in a row is skipped for 60 seconds, and one more than 20 blocks (50 slots) behind the best is treated as down. `/v1/capabilities` shows each endpoint's state.
 
-**Budgets.** DexPaprika: a ledger counts credits per hour over a rolling 30 days and stops at 95,000 (5% under the free key's 100,000); on-demand lookups are capped at 10 an hour. Blockscout: about 3 calls per EVM token, once, within the free plan's 100,000 credits a day.
+**Budgets.** DexPaprika: a ledger counts credits per hour over a rolling 30 days and stops at 95,000 (5% under the free key's 100,000); on-demand lookups are capped at 10 an hour. Blockscout: a holder list and an address lookup per EVM token, once, about 20 credits each (measured 2026-10-17 from the API's `x-credits-remaining` header), against the free plan's 100,000 a day; calls stop when fewer than 5,000 remain (`PUMP_BLOCKSCOUT_RESERVE`).
 
 **Store.** SQLite on the container's `/data` volume. Tokens with no ingest activity for 7 days are deleted.
 
@@ -124,7 +125,9 @@ Every supplier brings **two free keys of its own**. No key ships in this reposit
 | Setting | Where to get it | Without it |
 |---|---|---|
 | `PUMP_DEXPAPRIKA_API_KEY` | <https://console.dexpaprika.com> (free, no card) | The keyless tier: 10,000 credits per 30 days per IP, so far fewer new tokens are ingested |
-| `PUMP_BLOCKSCOUT_API_KEY` | <https://dev.blockscout.com> (PRO API, free plan) | `holder_concentration`, `deployer` and `creator_holding` on Base and Robinhood Chain read `not_available` (never `unknown`, so verdicts are unaffected) |
+| `PUMP_BLOCKSCOUT_API_KEY` | <https://dev.blockscout.com> (PRO API) | `holder_concentration`, `deployer` and `creator_holding` on Base and Robinhood Chain read `not_available` (never `unknown`, so verdicts are unaffected) |
+
+**Blockscout's free plan covers Robinhood Chain but not Base.** Since 2026-10-01 Base needs the Builder plan or above; on a free key Blockscout answers Base requests with a 402, and the service reports those three checks on Base as `not_available` with that reason. `/v1/capabilities` lists any chain the key's plan excludes under `blockscout.chains_not_in_plan`.
 
 **With the Pocket Service Manager:** Services, Service settings for `pump-check` shows a form for both keys (secrets appear only as set or not set) and offers Restart now. **Without it:** on the server, `install -m 600 /dev/null /opt/pocket/services/pump-check/settings.env`, add one `NAME='value'` line per key, and recreate the container (`docker compose -p pump-check up -d --no-build --force-recreate` in `deploy/`).
 
@@ -141,7 +144,7 @@ Every knob is a `PUMP_*` environment variable with a default in [`backend/config
 ```bash
 cd backend
 npm ci
-npm test            # 31 tests, offline: a recorded live session is replayed
+npm test            # 32 tests, offline: a recorded live session is replayed
 node server.js      # live, on :8080 (PORT to change; PUMP_DATA_DIR for the store)
 ```
 

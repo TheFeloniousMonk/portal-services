@@ -5,7 +5,13 @@
 //
 // Without PUMP_BLOCKSCOUT_API_KEY the holder and deployer checks are
 // "not_available" on that supplier, never "unknown", so a missing key cannot
-// turn a verdict unknown.
+// turn a verdict unknown. The same holds for a chain the key's plan does not
+// cover: since 2026-10-01 the free plan excludes Base (a 402 naming the plans
+// that include it), so on a free key Base reads not_available.
+//
+// Measured on 2026-10-17 from the x-credits-remaining header: a holder list
+// costs 20 credits and an address lookup costs none, against 100,000 a day
+// on the free plan. Calls stop when fewer than PUMP_BLOCKSCOUT_RESERVE remain.
 
 import { config } from "./config.js";
 
@@ -19,7 +25,23 @@ export class Blockscout {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.queue = Promise.resolve();
     this.lastCallAt = 0;
+    this.reserve = options.reserve ?? config.blockscoutReserve;
+    this.creditsRemaining = null;
+    this.creditsAt = 0;
+    this.planExcludes = new Map(); // chainId -> the plans Blockscout says the chain needs
     this.stats = { calls: 0, failures: 0, last_error: null, last_ok_at: null };
+  }
+
+  // Why this supplier cannot read a chain, or null.
+  unavailable(chainId) {
+    if (!this.key) return "this supplier has no Blockscout key";
+    if (this.planExcludes.has(chainId)) return "this supplier's Blockscout plan does not cover this chain (" + this.planExcludes.get(chainId) + ")";
+    return null;
+  }
+
+  // Daily credits are nearly spent: wait for the next day's allowance.
+  get exhausted() {
+    return this.creditsRemaining !== null && this.creditsRemaining < this.reserve && Date.now() - this.creditsAt < 3600000;
   }
 
   get enabled() {
@@ -34,7 +56,7 @@ export class Blockscout {
   }
 
   async #get(chainId, path, params) {
-    if (!this.key) return null;
+    if (!this.key || this.planExcludes.has(chainId) || this.exhausted) return null;
     const gap = Date.now() - this.lastCallAt;
     if (gap < this.spacingMs) await sleep(this.spacingMs - gap);
     this.lastCallAt = Date.now();
@@ -47,6 +69,26 @@ export class Blockscout {
         headers: { Accept: "application/json", "User-Agent": `${config.service}/${config.version}` },
         signal: AbortSignal.timeout(config.blockscoutDeadlineMs),
       });
+      const left = Number(res.headers.get("x-credits-remaining"));
+      if (Number.isFinite(left) && res.headers.get("x-credits-remaining") !== null) {
+        this.creditsRemaining = left;
+        this.creditsAt = Date.now();
+      }
+      if (res.status === 402) {
+        // "Featured chain 8453 requires one of the following plans: ..." is a
+        // standing answer for this key, not a transient fault.
+        let msg = "";
+        try {
+          msg = String((await res.json()).error || "");
+        } catch {
+          // no body
+        }
+        const m = /requires one of the following plans:\s*([A-Za-z ,]+)/i.exec(msg);
+        if (m) this.planExcludes.set(chainId, m[1].trim() + " plan");
+        this.stats.failures++;
+        this.stats.last_error = m ? "plan_excludes_chain_" + chainId : "http_402";
+        return null;
+      }
       if (!res.ok) {
         this.stats.failures++;
         this.stats.last_error = "http_" + res.status;
@@ -87,16 +129,13 @@ export class Blockscout {
     };
   }
 
-  // How many token contracts an address has created (a deployer's history).
-  // Blockscout counts contracts created by the address in its counters.
-  async deployedCount(chainId, address) {
-    const body = await this.get(chainId, `addresses/${address}/counters`);
-    if (!body) return null;
-    const n = Number(body.contracts_count ?? body.created_contracts_count ?? NaN);
-    return Number.isFinite(n) ? n : null;
-  }
-
   status() {
-    return { enabled: this.enabled, ...this.stats };
+    return {
+      enabled: this.enabled,
+      credits_remaining_today: this.creditsRemaining,
+      reserve: this.reserve,
+      chains_not_in_plan: Object.fromEntries(this.planExcludes),
+      ...this.stats,
+    };
   }
 }

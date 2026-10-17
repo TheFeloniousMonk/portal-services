@@ -67,9 +67,12 @@ export const config = Object.freeze({
   // --- Blockscout PRO API (EVM holders and deployer) ------------------------
   blockscoutKey: str(process.env.PUMP_BLOCKSCOUT_API_KEY, ""),
   blockscoutBase: str(process.env.PUMP_BLOCKSCOUT_BASE_URL, "https://api.blockscout.com"),
-  blockscoutDeadlineMs: num(process.env.PUMP_BLOCKSCOUT_DEADLINE_MS, 6000),
+  // Address lookups took up to 10.5 s on 2026-10-17; they run off the request path.
+  blockscoutDeadlineMs: num(process.env.PUMP_BLOCKSCOUT_DEADLINE_MS, 20000),
   // The free plan allows 5 requests a second.
   blockscoutSpacingMs: num(process.env.PUMP_BLOCKSCOUT_SPACING_MS, 220),
+  // Stop calling when fewer daily credits than this remain.
+  blockscoutReserve: num(process.env.PUMP_BLOCKSCOUT_RESERVE, 5000),
 
   // --- RPC ---------------------------------------------------------------
   rpc: Object.freeze({

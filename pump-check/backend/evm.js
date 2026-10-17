@@ -487,9 +487,15 @@ export class EvmChain {
   // ---- holders (Blockscout) ----
 
   async holders(token, supply, exclude) {
-    if (!this.blockscout || !this.blockscout.enabled) return { result: "not_available", reason: "this supplier has no Blockscout key", method: null, source: null };
+    const why = this.blockscout ? this.blockscout.unavailable(this.addr.chainId) : "this supplier has no Blockscout key";
+    if (why) return { result: "not_available", reason: why, method: null, source: null };
     const list = await this.blockscout.holders(this.addr.chainId, token);
-    if (!list) return { result: "unknown", reason: "Blockscout did not answer", method: "definitive", source: "live" };
+    if (!list) {
+      // The first call on a chain is where a plan exclusion shows up.
+      const now = this.blockscout.unavailable(this.addr.chainId);
+      if (now) return { result: "not_available", reason: now, method: null, source: null };
+      return { result: "unknown", reason: this.blockscout.exhausted ? "Blockscout's daily credits are used up" : "Blockscout did not answer", method: "definitive", source: "live" };
+    }
     const counted = list.filter((h) => !exclude.has(h.address) && !BURN_ADDRESSES.has(h.address));
     const top = counted.slice(0, 10);
     const sum = top.reduce((n, h) => n + h.value, 0n);
@@ -505,8 +511,13 @@ export class EvmChain {
   }
 
   async creator(token) {
-    if (!this.blockscout || !this.blockscout.enabled) return null;
+    if (!this.blockscout || this.blockscout.unavailable(this.addr.chainId)) return null;
     return this.blockscout.creator(this.addr.chainId, token);
+  }
+
+  // Why holders and the deployer cannot be read on this chain, or null.
+  blockscoutUnavailable() {
+    return this.blockscout ? this.blockscout.unavailable(this.addr.chainId) : "this supplier has no Blockscout key";
   }
 
   // ---- snipers and bundles (computed once, at ingest) ----

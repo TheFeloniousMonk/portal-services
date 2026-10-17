@@ -215,6 +215,36 @@ test("spending stops at the ceiling and the fallback cap", async () => {
   assert.equal(calls, 3);
 });
 
+// ---- Blockscout ----
+
+test("Blockscout: a chain outside the key's plan reads not_available, credits are tracked", async () => {
+  const { Blockscout } = await import("../blockscout.js");
+  const fetchImpl = async (url) => {
+    const chain = new URL(url).pathname.split("/")[1];
+    if (chain === "8453") {
+      // The answer Blockscout gave on 2026-10-17 for a free key.
+      return new Response(JSON.stringify({ error: "Featured chain 8453 requires one of the following plans: Builder, Business, Pro", source: "x" }), {
+        status: 402,
+        headers: { "content-type": "application/json", "x-ratelimit-limit": "5" },
+      });
+    }
+    return new Response(JSON.stringify({ items: [{ address: { hash: "0xAbC0000000000000000000000000000000000001", is_contract: false, name: null }, value: "5" }] }), {
+      status: 200,
+      headers: { "content-type": "application/json", "x-credits-remaining": "4000" },
+    });
+  };
+  const bs = new Blockscout({ key: "k", fetchImpl, spacingMs: 0, reserve: 5000 });
+  assert.equal(bs.unavailable(8453), null);
+  assert.equal(await bs.holders(8453, "0x1"), null);
+  assert.match(bs.unavailable(8453), /Builder, Business, Pro/);
+  const h = await bs.holders(4663, "0x1");
+  assert.equal(h[0].address, "0xabc0000000000000000000000000000000000001");
+  // 4,000 left is under the 5,000 reserve: no more calls until the next day.
+  assert.equal(bs.exhausted, true);
+  assert.equal(await bs.holders(4663, "0x1"), null);
+  assert.equal(new Blockscout({ key: "" }).unavailable(4663), "this supplier has no Blockscout key");
+});
+
 // ---- verdict ----
 
 test("verdict rules", () => {
