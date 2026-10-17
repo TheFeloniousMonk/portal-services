@@ -1,0 +1,7 @@
+{
+  "service_id": "pump-check",
+  "name": "PumpCheck",
+  "compute_units_per_relay": 100000,
+  "card": "card.json",
+  "networks": {}
+}
