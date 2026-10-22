@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:24.22.1-alpine
 WORKDIR /app
 # NODE_NO_WARNINGS hides the one-line notice that node:sqlite is experimental.
 ENV NODE_ENV=production PORT=8080 PUMP_DATA_DIR=/data NODE_NO_WARNINGS=1

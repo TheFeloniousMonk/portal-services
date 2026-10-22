@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.22.1
 
       - name: Install
         run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; fi
