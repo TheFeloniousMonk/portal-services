@@ -12,7 +12,7 @@
 services:
   backend:
     build: ../backend
-    image: pretty-charts-backend:1.0.0
+    image: pretty-charts-backend:1.0.1
     container_name: pretty-charts-backend
     restart: unless-stopped
     environment:

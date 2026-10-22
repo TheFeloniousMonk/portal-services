@@ -19,7 +19,7 @@
 services:
   backend:
     build: ../backend
-    image: taint-check-backend:1.1.0
+    image: taint-check-backend:1.1.1
     container_name: taint-check-backend
     restart: unless-stopped
     environment:

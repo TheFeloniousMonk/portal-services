@@ -14,7 +14,7 @@ function intEnv(name, fallback) {
 
 export const config = Object.freeze({
   service: "pretty-charts",
-  version: "1.0.0",
+  version: "1.0.1",
   port: intEnv("PORT", 8080),
   // Largest accepted request body, in bytes (CSV or JSON rows plus the spec).
   maxBodyBytes: intEnv("PC_MAX_BODY_BYTES", 1024 * 1024),

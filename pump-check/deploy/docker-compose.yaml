@@ -24,7 +24,7 @@
 services:
   backend:
     build: ../backend
-    image: pump-check-backend:1.1.0
+    image: pump-check-backend:1.1.1
     container_name: pump-check-backend
     restart: unless-stopped
     env_file:

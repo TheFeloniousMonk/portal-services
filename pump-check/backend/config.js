@@ -48,7 +48,7 @@ export const CHAINS = Object.freeze(["solana", "base", "robinhood"]);
 
 export const config = Object.freeze({
   service: "pump-check",
-  version: "1.1.0",
+  version: "1.1.1",
   port: num(process.env.PORT, 8080),
   dataDir: str(process.env.PUMP_DATA_DIR, "/data"),
 

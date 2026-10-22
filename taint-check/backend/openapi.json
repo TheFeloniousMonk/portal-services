@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "TaintCheck",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "Scans a dependency manifest for known-vulnerable and confirmed-malicious packages, backed by a local mirror of OSV.dev and the OpenSSF Malicious Packages feed. Every response is a JSON object, including errors. Served as a REST service on Pocket Network; inputs arrive in the POST body only."
   },
   "servers": [{ "url": "/" }],

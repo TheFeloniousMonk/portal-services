@@ -1,6 +1,6 @@
 {
   "name": "infinifi",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "infiniFi protocol data for agents, served as a REST service on Pocket Network: a read-only pass-through to the infiniFi protocol API covering yields, farms, redemptions, allocation votes, partner opportunities, and per-wallet positions, profit, history, and points.",
   "license": "MIT",
   "private": true,

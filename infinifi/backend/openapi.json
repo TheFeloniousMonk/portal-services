@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "infiniFi Data (Pocket Network service)",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Read-only pass-through to the infiniFi protocol API (api.infinifi.xyz), served on Pocket Network as service `infinifi`. Every input is a JSON body; every response, errors included, is a JSON object. APYs are fractions (0.062 = 6.2%); token amounts are whole tokens. The service never signs, prepares, or submits a transaction. Not affiliated with infiniFi."
   },
   "servers": [

@@ -32,7 +32,7 @@ const plan = !hasKey ? "keyless" : planSetting === "paid" ? "paid" : "free";
 
 export const config = Object.freeze({
   service: "meme-watch",
-  version: "1.0.2",
+  version: "1.0.3",
   port: num(process.env.PORT, 8080),
 
   // --- upstream ---------------------------------------------------------
