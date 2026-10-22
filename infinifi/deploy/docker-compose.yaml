@@ -15,7 +15,7 @@
 services:
   backend:
     build: ../backend
-    image: infinifi-backend:1.0.0
+    image: infinifi-backend:1.0.1
     container_name: infinifi-backend
     restart: unless-stopped
     environment:

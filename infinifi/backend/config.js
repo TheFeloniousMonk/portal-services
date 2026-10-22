@@ -13,7 +13,7 @@ const str = (v, d) => (v === undefined || v === "" ? d : String(v));
 
 export const config = Object.freeze({
   service: "infinifi",
-  version: "1.0.0",
+  version: "1.0.1",
   port: num(process.env.PORT, 8080),
 
   // --- upstream ---------------------------------------------------------

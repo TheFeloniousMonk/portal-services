@@ -20,7 +20,7 @@ const list = (v, d) => {
 
 export const config = Object.freeze({
   service: "taint-check",
-  version: "1.1.0",
+  version: "1.1.1",
   port: num(process.env.PORT, 8080),
 
   // --- mirror -----------------------------------------------------------

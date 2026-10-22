@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pretty Charts API",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Pretty Charts renders a chart from inline data and returns it as static SVG (or a complete HTML document) inside a JSON object. Every data mark carries a native <title> tooltip, so nothing needs to be loaded or executed on the client. The renderer is Vega-Lite: send a full Vega-Lite spec in 'spec', or the shorthand form in 'chart' (type, x, y, color, ...). Data must be inline (csv, tsv, json, or values); remote URLs are refused. Every response, including errors, is a JSON object. Callers cannot send request headers through a Pocket gateway, so every input lives in the request body. Output is deterministic: identical requests to any supplier running the same version return identical bytes."
   },
   "servers": [{ "url": "/" }],

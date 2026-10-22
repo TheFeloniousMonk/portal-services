@@ -1,6 +1,6 @@
 {
   "name": "pretty-charts",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Pretty Charts: a Vega-Lite chart renderer served as a REST service on Pocket Network. Returns static SVG with native hover tooltips inside a JSON envelope.",
   "license": "MIT",
   "private": true,
